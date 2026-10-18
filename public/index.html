@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>tranRU · 演講即時翻譯</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="topbar" aria-label="主要導覽">
+    <a class="brand" href="/">▥ <span>tranRU</span></a>
+    <span class="nav active" aria-current="page">◉ 即時口譯</span>
+    <div class="topbar-actions">
+      <button id="settings">⚙ 服務設定</button>
+      <button id="fullscreen">⛶ 全螢幕</button>
+    </div>
+  </nav>
+  <button id="exitCompact" class="exit-compact" hidden>退出專注顯示 · Esc</button>
+
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">LIVE SIMULTANEOUS INTERPRETATION</div>
+        <h1>專心聽，讓語言退到背景。</h1>
+        <p>演講、國際論壇、線上課程與每一個值得即時理解的精彩觀點。</p>
+      </div>
+      <div class="header-actions">
+        <button id="pip" title="開啟置頂懸浮視窗，可覆蓋在 Zoom 或簡報上方">🪟 懸浮字幕</button>
+        <button id="focus">⛶ 演講模式</button>
+      </div>
+    </header>
+
+    <section class="controls">
+      <label>音訊來源
+        <select id="source">
+          <option value="mic">◉ 現場麥克風</option>
+          <option value="tab">▣ 分頁／電腦音訊</option>
+        </select>
+      </label>
+
+      <label>辨識引擎
+        <select id="engine">
+          <option value="gemini">Gemini 即時翻譯（推薦）</option>
+          <option value="vad">⚡ 智慧停頓切段 (OpenAI)</option>
+          <option value="native">🚀 極速即時模式 (原生語音)</option>
+        </select>
+      </label>
+
+      <label>演講語言
+        <select id="language">
+          <option value="en">English · 英文</option>
+          <option value="ja">日本語 · 日文</option>
+          <option value="ko">한국어 · 韓文</option>
+          <option value="zh">中文 · 華語</option>
+          <option value="auto">自動偵測</option>
+          <option value="es">Español · 西班牙文</option>
+          <option value="fr">Français · 法文</option>
+          <option value="de">Deutsch · 德文</option>
+        </select>
+      </label>
+
+      <span class="arrow">→</span>
+
+      <label>翻譯為
+        <select id="target">
+          <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
+          <option value="English">English</option>
+          <option value="Japanese">日本語</option>
+        </select>
+      </label>
+
+      <button class="primary" id="start">● 開始聆聽</button>
+    </section>
+
+    <section class="dual-options" aria-label="第二語言設定">
+      <label class="inline"><input type="checkbox" id="dualTranslation">同時翻譯成兩種語言</label>
+      <label id="secondTargetLabel" hidden>第二種目標語言
+        <select id="secondTarget"><option value="English">English</option><option value="Japanese" selected>日本語</option><option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option></select>
+      </label>
+      <small id="dualHint" hidden>會增加翻譯用量；Gemini 會同時使用兩個語音翻譯工作階段。請在開始前設定。</small>
+    </section>
+
+    <div class="statusbar">
+      <div class="status-left">
+        <span id="status" role="status" aria-live="polite">○ 準備就緒</span>
+        <div class="meter-wrapper" title="即時收音音量指示">
+          <span>收音</span>
+          <div class="meter-bar">
+            <div class="meter-fill" id="meterFill"></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span id="badge" class="badge">智慧串流</span>
+        <b id="clock">00:00:00</b>　<span id="count">0</span> 段字幕
+      </div>
+    </div>
+
+    <section class="transcript">
+      <div class="panel-head">
+        <span>演講原文 <small>ORIGINAL SPEECH</small></span>
+        <span>即時口譯 <small>SIMULTANEOUS TRANSLATION</small></span>
+      </div>
+      <div id="rows">
+        <div class="empty">
+          <div class="sound">▂ ▅ ▃ ▇ ▅ ▂ ▄</div>
+          <h2>把注意力，留給演講。</h2>
+          <p>
+            選擇 Gemini 連續翻譯，或使用 OpenAI 備用。<br>
+            原文與繁體中文字幕將在這裡呈現。
+          </p>
+          <button id="demo">先看看字幕示範 ↗</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="secondPanel" class="transcript second-panel" hidden>
+      <div class="panel-head"><span>演講原文 <small>ORIGINAL SPEECH</small></span><span id="secondTitle">第二語言譯文</span></div>
+      <p id="secondStatus" role="status" aria-live="polite">等待第二語言字幕</p>
+      <div id="secondRows"></div>
+    </section>
+
+    <footer>
+      <div>
+        <label class="inline">字幕大小 <input id="font" type="range" min="18" max="44" value="24"></label>
+        <label class="inline"><input id="autoscroll" type="checkbox" checked>自動捲動</label>
+      </div>
+      <div>
+        <button id="summaryBtn" class="accent-btn" title="由 AI 自動提煉本次演講核心重點">✨ AI 演講摘要</button>
+        <button id="export">↓ 匯出逐字稿</button>
+        <button id="clear">清除紀錄</button>
+      </div>
+    </footer>
+
+    <details>
+      <summary>專業詞彙與演講背景（僅 OpenAI 模式使用）</summary>
+      <textarea id="context" placeholder="例如：AI 研討會；LLM＝大型語言模型，inference＝推論，Transformer＝轉換器架構，fine-tuning＝微調。OpenAI 翻譯時參考此對照表；Gemini Live Translate 不支援自訂提示。"></textarea>
+    </details>
+
+    <details>
+      <summary>文字手動翻譯／連線測試</summary>
+      <textarea id="manual" placeholder="貼上演講文字，可測試即時串流翻譯效果。"></textarea>
+      <button id="translate">串流翻譯文字</button>
+    </details>
+
+    <p class="note">
+      Gemini 模式會將音訊連續傳送至 Google；OpenAI 模式會傳送至 OpenAI，兩者依 API 額度計費。
+      Gemini 為預覽服務，自動偵測原語言，僅顯示字幕、不播放譯音（服務仍可能計算音訊輸出費用）。
+      自動備用啟用後，Gemini 中斷將改由 OpenAI 處理後續收音；切換期間的未完成字幕可能缺漏。
+      線上演講請選取分頁並勾選「分享分頁音訊」。
+    </p>
+  </main>
+
+  <dialog id="dialog">
+    <form method="dialog"><button class="close" aria-label="關閉">×</button></form>
+    <h2>翻譯與辨識服務設定</h2>
+    <p>請填入你自己的 Gemini API 金鑰。金鑰僅暫存在本站伺服器上屬於你的工作階段記憶體，不寫入磁碟；閒置約 30 分鐘或伺服器重啟後需重填。只有設定與使用時會送往服務端，不會提供給其他訪客。</p>
+    
+    <label>Gemini API 金鑰（主要服務）
+      <input id="geminiKey" type="password" autocomplete="off" placeholder="貼上 Google AI Studio API 金鑰">
+    </label>
+    <p><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">取得 Gemini API 金鑰 ↗</a> · <span id="keyStatus"></span></p>
+    <label class="inline"><input id="fallback" type="checkbox">Gemini 中斷時，自動改用 OpenAI（需另設金鑰）</label>
+    <label>OpenAI API 金鑰（備用服務）
+      <input id="key" type="password" autocomplete="off" placeholder="sk-proj-…">
+    </label>
+    
+    <label>翻譯模型 (Chat Model)
+      <input id="model" value="gpt-4o-mini" placeholder="gpt-4o-mini 或 gpt-4o">
+    </label>
+    
+    <label>語音辨識模型 (STT Model)
+      <input id="speech" value="gpt-4o-mini-transcribe" placeholder="gpt-4o-mini-transcribe 或 whisper-1">
+    </label>
+
+    <label>切段停頓靈敏度 (VAD Silence Wait)
+      <select id="vadSilenceMs">
+        <option value="500">極速 (500ms 停頓即切段 · 延遲最低)</option>
+        <option value="650" selected>標準 (650ms 停頓即切段 · 推薦)</option>
+        <option value="850">長句 (850ms 停頓即切段 · 適合講話較慢的講者)</option>
+      </select>
+    </label>
+
+    <label>串流翻譯服務商 (LLM Provider)
+      <select id="translationProvider">
+        <option value="auto">自動選擇（有 Gemini 金鑰優先使用 Gemini Flash）</option>
+        <option value="gemini">Google Gemini (Gemini Flash · 首字極速)</option>
+        <option value="openai">OpenAI (GPT-4o-mini)</option>
+      </select>
+    </label>
+
+    <button id="save" class="primary">儲存設定</button>
+    <button id="checkGemini">測試 Gemini 連線（不收音）</button>
+    <button id="clearKeys">清除我的金鑰</button>
+    <p id="configStatus" role="status"></p>
+    <small>
+      提示：若使用「極速即時模式 (原生語音)」，現場收音由瀏覽器提供辨識，速度與支援依瀏覽器而定；譯文可依偏好由 Gemini Flash 或 OpenAI 串流產出。
+    </small>
+  </dialog>
+
+  <dialog id="summaryDialog" class="summary-dialog">
+    <form method="dialog"><button class="close" aria-label="關閉">×</button></form>
+    <h2>✨ 演講重點摘要 (AI Summary)</h2>
+    <p>AI 自動提煉演講核心主旨、關鍵重點與行動啟發。</p>
+    <div id="summaryContent" class="summary-body">正在分析逐字稿內容…</div>
+    <div class="summary-actions">
+      <button id="copySummary">📋 複製摘要</button>
+      <button id="downloadSummary">↓ 下載 Markdown 報告</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
