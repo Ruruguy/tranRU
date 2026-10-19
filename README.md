@@ -72,7 +72,7 @@ Gemini 的 `inputAudioTranscription` 與 `outputAudioTranscription` 位於 `setu
 
 ## 部署到網路
 
-這個專案有 Node.js HTTP／SSE 與對 Google 的 WebSocket 後端，**不能直接部署到 GitHub Pages**。GitHub 儲存庫只保存程式碼；可部署到支援常駐 Node.js 或 Docker、HTTPS 的主機。
+本機／Node 版本有 HTTP／SSE 與對 Google 的 WebSocket 後端，不能直接把該版本部署到 GitHub Pages。另提供以下瀏覽器直連建置，可部署至靜態主機。GitHub 儲存庫只保存程式碼；可部署到支援常駐 Node.js 或 Docker、HTTPS 的主機。
 
 ### Node.js 主機
 
@@ -103,3 +103,20 @@ docker run --rm -p 8787:8787 -e APP_ORIGIN=https://your-app.example.com tranru
 ## 專案驗證
 
 GitHub Actions 會在 Node.js 22 與 24 執行測試。測試不呼叫付費 AI API；包含訪客金鑰隔離、跨工作階段 CSRF、跨網站請求拒絕，以及原有的串流／PCM／備用行為。實際 Gemini 模型可用性和翻譯品質仍取決於訪客帳戶與實際音訊。
+
+
+## Sites 線上部署版本（瀏覽器直連）
+
+`npm run build` 產生 `dist/`，可部署為純靜態網站。Sites 專案識別記錄在 `.openai/hosting.json`；GitHub 程式庫保持私人。
+
+- 線上版的金鑰只保存在訪客自己的分頁記憶體中，重新整理後需重填。金鑰、音訊、譯文請求直接送到 Google／OpenAI，不經過本站 Node 伺服器，也不寫進 GitHub 或 localStorage。
+- 本機 `npm start` 仍使用原有 Node 伺服器及個人 Cookie 工作階段；只有 build 產生的 HTML 才帶有瀏覽器模式標記。
+- 保留演講、兩種目標語言、雙向對話、摘要、逐字稿匯出與懸浮字幕。雙向對話辨識使用瀏覽器 Web Speech API，依瀏覽器服務與支援程度而定；譯文再使用訪客自己的 AI API 金鑰。
+- 開始收音前需設定有效金鑰，Gemini Live 會先驗證握手。API 權限、模型額度、區域與瀏覽器跨來源政策仍可能影響實際使用。
+- 新建 Sites 預設僅擁有者可存取。擴大分享範圍需另行設定 Sites 存取權；私人 GitHub 儲存庫與網站存取權是分開的。
+
+### 這次檢視修正
+
+移除對話朗讀按鈕的內嵌 JavaScript，改用事件監聽；對話與摘要共用可跨網路封包解析的 SSE parser；模式切換會停止收音與朗讀，舊辨識工作階段不再影響新收音；行動版保留模式切換按鈕。
+
+自動測試使用假 WebSocket／API 回應，不呼叫付費 API。介面已檢查模式切換與缺少金鑰時的提示；真實語音辨識、翻譯品質及長時間穩定性仍需使用者金鑰實測。

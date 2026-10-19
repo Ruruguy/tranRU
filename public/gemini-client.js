@@ -1,3 +1,4 @@
+import {apiFetch} from './api-client.js';
 export class SSEParser {
  constructor(onEvent){this.buffer='';this.onEvent=onEvent;}
  push(text){this.buffer+=text.replace(/\r\n/g,'\n');let p;while((p=this.buffer.indexOf('\n\n'))>=0){const block=this.buffer.slice(0,p);this.buffer=this.buffer.slice(p+2);let event='message';const data=[];for(const line of block.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trimStart());}if(data.length)this.onEvent(event,JSON.parse(data.join('\n')));}}
@@ -9,7 +10,7 @@ export class PCMChunks {
  tail(){return this.samples.length?this.encode():null;}
 }
 export class GeminiLiveClient {
- constructor({token,onEvent,onFailure,fetcher=(...args)=>globalThis.fetch(...args)}){Object.assign(this,{token,onEvent,onFailure,fetcher});this.queue=[];this.active=false;this.sending=false;this.stopping=false;}
+ constructor({token,onEvent,onFailure,fetcher=apiFetch}){Object.assign(this,{token,onEvent,onFailure,fetcher});this.queue=[];this.active=false;this.sending=false;this.stopping=false;}
  async post(path,data,signal){const r=await this.fetcher('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':this.token},body:JSON.stringify(data),signal});if(!r.ok){const d=await r.json();throw Error(d.error||'Gemini 請求失敗');}return r;}
  async connect(target){this.abort=new AbortController();this.active=true;return new Promise((resolve,reject)=>{let ready=false;const timer=setTimeout(()=>{reject(Error('Gemini 啟動逾時'));this.close();},20000);
  const parser=new SSEParser((event,data)=>{if(event==='ready'){ready=true;this.id=data.id;clearTimeout(timer);resolve();}else if(event==='error')throw Error(data.error);else this.onEvent(event,data);});

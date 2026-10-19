@@ -1,3 +1,4 @@
+import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
 import {GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
 const $ = id => document.getElementById(id);
@@ -12,6 +13,7 @@ const canStart = () => $('engine').value === 'gemini' ? geminiConfigured : (open
 function updateKeys(s) {
  openaiConfigured = s.openaiConfigured ?? s.configured; geminiConfigured = !!s.geminiConfigured; configured = openaiConfigured || geminiConfigured;
  if ($('keyStatus')) $('keyStatus').textContent = `Gemini：${geminiConfigured ? '已設定' : '未設定'}；OpenAI：${openaiConfigured ? '已設定' : '未設定'}`;
+ if(s.browserOnly && $('keyDescription'))$('keyDescription').textContent='線上版：請填入自己的 API 金鑰。金鑰僅保存在本分頁記憶體，直接送至 Google／OpenAI，不會上傳至本站主機；重新整理後需重填。';
  if (s.translationProvider && $('translationProvider')) $('translationProvider').value = s.translationProvider;
 }
 let running = false;
@@ -82,7 +84,7 @@ $('save').onclick = async () => {
 };
 
 $('clearKeys').onclick=async()=>{
- if(running || starting){$('configStatus').textContent='請先停止聆聽，再清除金鑰';return;}
+ if(running || starting || convActiveSpeaker){$('configStatus').textContent='請先停止聆聽，再清除金鑰';return;}
  try {
   const response=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({key:'',geminiKey:''})});
   const result=await response.json();if(!response.ok)throw Error(result.error);
@@ -981,41 +983,16 @@ async function generateSummary() {
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    let sseBuf = '', summaryText = '';
-    content.textContent = '';
-
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      sseBuf += decoder.decode(value, {stream: true});
-      const lines = sseBuf.split('\n');
-      sseBuf = lines.pop() || '';
-
-      let currentEvent = 'message';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        if (trimmed.startsWith('event:')) currentEvent = trimmed.slice(6).trim();
-        if (trimmed.startsWith('data:')) {
-          const raw = trimmed.slice(5).trim();
-          try {
-            const parsed = JSON.parse(raw);
-            if (currentEvent === 'delta' && parsed.delta) {
-              summaryText += parsed.delta;
-              content.textContent = summaryText;
-              content.scrollTop = content.scrollHeight;
-            } else if (currentEvent === 'done' && parsed.summary) {
-              summaryText = parsed.summary;
-              content.textContent = summaryText;
-            } else if (currentEvent === 'error') {
-              throw new Error(parsed.error || '摘要生成失敗');
-            }
-          } catch (pe) {
-            if (currentEvent === 'error') throw pe;
-          }
-        }
-      }
-    }
+    let summaryText='',complete=false;
+    content.textContent='';
+    const parser=new SSEParser((event,data)=>{
+      if(event==='error')throw Error(data.error||'摘要生成失敗');
+      if(event==='delta')summaryText+=data.delta||'';
+      if(event==='done'){complete=true;if(data.summary!==undefined)summaryText=data.summary;}
+      content.textContent=summaryText;content.scrollTop=content.scrollHeight;
+    });
+    while(true){const {done,value}=await reader.read();if(done)break;parser.push(decoder.decode(value,{stream:true}));}
+    if(!complete)throw Error('摘要串流提早中斷');
   } catch (e) {
     content.textContent += '\n\n[摘要生成中斷：' + e.message + ']';
   }
@@ -1045,3 +1022,350 @@ if ($('downloadSummary')) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 }
+
+// ==========================================
+// ⇄ 雙向即時對話口譯模式 (Bidirectional Mode)
+// ==========================================
+
+async function switchMode(mode) {
+  if(starting)return;
+  if(mode==='conversation' && running)await stop();
+  stopConvSpeech();
+  convEpoch++;
+  window.speechSynthesis?.cancel();
+  if (mode === 'conversation') {
+    if ($('navLecture')) $('navLecture').classList.remove('active');
+    if ($('navConversation')) $('navConversation').classList.add('active');
+    if ($('lectureView')) $('lectureView').style.display = 'none';
+    if ($('conversationView')) $('conversationView').style.display = 'block';
+  } else {
+    if ($('navConversation')) $('navConversation').classList.remove('active');
+    if ($('navLecture')) $('navLecture').classList.add('active');
+    if ($('conversationView')) $('conversationView').style.display = 'none';
+    if ($('lectureView')) $('lectureView').style.display = 'block';
+  }
+}
+
+if ($('navLecture')) $('navLecture').onclick = () => switchMode('lecture');
+if ($('navConversation')) $('navConversation').onclick = () => switchMode('conversation');
+
+function updateConvLabels() {
+  if (!$('convLangA') || !$('convLangB')) return;
+  const optA = $('convLangA').selectedOptions[0];
+  const optB = $('convLangB').selectedOptions[0];
+  if ($('labelSpeakA') && optA) $('labelSpeakA').textContent = `說${optA.text.split('·')[0].trim()} (我方)`;
+  if ($('labelSpeakB') && optB) $('labelSpeakB').textContent = `說${optB.text.split('·')[0].trim()} (對方)`;
+}
+
+if ($('convLangA')) $('convLangA').onchange = updateConvLabels;
+if ($('convLangB')) $('convLangB').onchange = updateConvLabels;
+if ($('convSwapLangs')) {
+  $('convSwapLangs').onclick = () => {
+    const tempVal = $('convLangA').value;
+    $('convLangA').value = $('convLangB').value;
+    $('convLangB').value = tempVal;
+    updateConvLabels();
+  };
+}
+updateConvLabels();
+
+let convRecords = [];
+let convActiveSpeaker = null; // 'A' | 'B' | null
+let convRecognizer = null;
+let convEpoch = 0;
+
+function convStatus(t) {
+  if ($('convStatus')) $('convStatus').textContent = t;
+}
+
+function speakTTS(text, langCode) {
+  if (!('speechSynthesis' in window) || !text) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = langCode || 'en-US';
+    u.rate = 1.0;
+    window.speechSynthesis.speak(u);
+  } catch {}
+}
+window.speakTTS = speakTTS;
+
+function getConversationHistory() {
+  return convRecords
+    .filter(r => r.state === 'done' && r.text && r.translation)
+    .slice(-4)
+    .map(r => ({
+      text: `[${r.speaker === 'A' ? 'Speaker A' : 'Speaker B'}]: ${r.text}`,
+      translation: r.translation
+    }));
+}
+
+function drawConvFeed() {
+  const feed = $('convFeed');
+  if (!feed) return;
+  if (!convRecords.length) {
+    feed.innerHTML = `
+      <div class="conv-empty">
+        <div class="sound">💬</div>
+        <h2>隨時開始自然雙向對話</h2>
+        <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+      </div>
+    `;
+    if ($('convCount')) $('convCount').textContent = '0 則對話';
+    return;
+  }
+
+  feed.innerHTML = convRecords.map(r => {
+    const isA = r.speaker === 'A';
+    const speakerName = isA ? '我方' : '對方';
+    return `
+      <div class="conv-bubble ${isA ? 'conv-bubble-a' : 'conv-bubble-b'}" id="conv-bubble-${r.id}">
+        <div class="conv-bubble-meta">
+          <span class="conv-bubble-speaker">${speakerName} · ${r.time}</span>
+          ${r.translation ? `<button class="conv-tts-btn" data-record="${r.id}" title="朗讀譯文">🔊 朗讀</button>` : ''}
+        </div>
+        <div class="conv-original">${escapeHtml(r.text || r.interim || '正在辨識語音…')}</div>
+        <div class="conv-translation">${escapeHtml(r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''))}</div>
+      </div>
+    `;
+  }).join('');
+
+  for(const button of feed.querySelectorAll('.conv-tts-btn'))button.onclick=()=>{
+    const r=convRecords.find(record=>record.id===button.dataset.record);
+    if(r)speakTTS(r.translation,r.ttsLangCode);
+  };
+  if ($('convCount')) $('convCount').textContent = `${convRecords.length} 則對話`;
+  feed.scrollTop = feed.scrollHeight;
+}
+
+async function translateConvRecord(record, text, targetLangStr, ttsLangCode) {
+  record.text = text;
+  record.ttsLangCode = ttsLangCode;
+  record.translation = '';
+  record.state = 'streaming';
+  const epoch=convEpoch;
+  drawConvFeed();
+
+  try {
+    const res = await fetch('/api/translate-stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Token': token,
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({
+        text,
+        target: targetLangStr,
+        context: $('context')?.value || '',
+        history: getConversationHistory()
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `請求失敗 (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let complete=false;
+    const parser=new SSEParser((event,data)=>{
+      if(event==='error')throw Error(data.error||'翻譯失敗');
+      if(event==='delta')record.translation+=data.delta||'';
+      if(event==='done'){complete=true;if(data.translation!==undefined)record.translation=data.translation;}
+      drawConvFeed();
+    });
+    while(true){const {done,value}=await reader.read();if(done)break;parser.push(decoder.decode(value,{stream:true}));}
+    if(!complete)throw Error('翻譯串流提早中斷，請重新送出');
+    record.state='done';drawConvFeed();
+
+    // Auto TTS
+    if (epoch===convEpoch && !convActiveSpeaker && $('convAutoTTS')?.checked && record.translation) {
+      speakTTS(record.translation, ttsLangCode);
+    }
+  } catch (err) {
+    record.state = 'error';
+    record.translation = `[翻譯異常: ${err.message}]`;
+    drawConvFeed();
+  }
+}
+
+function sendManualConv(speaker) {
+  const input = $('convTextInput');
+  const text = input?.value.trim();
+  if (!text) return;
+  if(!configured){$('dialog').showModal();convStatus('請先設定自己的 API 金鑰');return;}
+  input.value = '';
+
+  const isA = speaker === 'A';
+  const targetOpt = isA ? $('convLangB').selectedOptions[0] : $('convLangA').selectedOptions[0];
+  const targetStr = targetOpt.dataset.target || targetOpt.text;
+  const ttsCode = targetOpt.value;
+
+  const rec = {
+    id: crypto.randomUUID(),
+    speaker,
+    time: formatTime(),
+    text,
+    translation: '',
+    state: 'pending'
+  };
+  convRecords.push(rec);
+  translateConvRecord(rec, text, targetStr, ttsCode);
+}
+
+if ($('convSendA')) $('convSendA').onclick = () => sendManualConv('A');
+if ($('convSendB')) $('convSendB').onclick = () => sendManualConv('B');
+if ($('convTextInput')) {
+  $('convTextInput').onkeydown = e => {
+    if (e.key === 'Enter') sendManualConv('A');
+  };
+}
+
+function toggleTalk(speaker) {
+  if (convActiveSpeaker === speaker) {
+    stopConvSpeech();
+    return;
+  }
+  if (convActiveSpeaker) {
+    stopConvSpeech();
+  }
+  startConvSpeech(speaker);
+}
+
+function startConvSpeech(speaker) {
+  if(!configured){$('dialog').showModal();convStatus('請先設定自己的 API 金鑰');return;}
+  if($('convLangA').value===$('convLangB').value){convStatus('請選擇不同的雙方語言');return;}
+  window.speechSynthesis?.cancel();
+  const epoch=++convEpoch;
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const isA = speaker === 'A';
+  const langOpt = isA ? $('convLangA').selectedOptions[0] : $('convLangB').selectedOptions[0];
+  const targetOpt = isA ? $('convLangB').selectedOptions[0] : $('convLangA').selectedOptions[0];
+  const langCode = langOpt.value;
+  const targetStr = targetOpt.dataset.target || targetOpt.text;
+  const ttsCode = targetOpt.value;
+
+  convActiveSpeaker = speaker;
+  const btn = isA ? $('btnSpeakA') : $('btnSpeakB');
+  if (btn) {
+    btn.classList.add('recording');
+    const titleEl = btn.querySelector('.talk-title');
+    if (titleEl) titleEl.textContent = '■ 正在收音 (點擊結束)';
+  }
+  convStatus(`● 正在聆聽${isA ? '我方' : '對方'}說話…`);
+
+  if (SpeechRec) {
+    convRecognizer = new SpeechRec();
+    convRecognizer.continuous = true;
+    convRecognizer.interimResults = true;
+    convRecognizer.lang = langCode;
+
+    const recognizer=convRecognizer;
+    let currentRec = null;
+
+    convRecognizer.onresult = e => {
+      if(epoch!==convEpoch)return;
+      let interim = '';
+      let final = '';
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += transcript;
+        else interim += transcript;
+      }
+
+      if (!currentRec) {
+        currentRec = {
+          id: crypto.randomUUID(),
+          speaker,
+          time: formatTime(),
+          text: '',
+          interim: interim,
+          translation: '',
+          state: 'pending'
+        };
+        convRecords.push(currentRec);
+      } else {
+        currentRec.interim = interim;
+      }
+      drawConvFeed();
+
+      if (final.trim()) {
+        currentRec.text = final.trim();
+        currentRec.interim = '';
+        const toTranslate = currentRec;
+        currentRec = null;
+        stopConvSpeech();
+        translateConvRecord(toTranslate, toTranslate.text, targetStr, ttsCode);
+      }
+    };
+
+    convRecognizer.onerror = err => {
+      if(epoch!==convEpoch)return;
+      if (err.error !== 'no-speech') {
+        convStatus('收音提示：' + err.error);
+      }
+    };
+
+    convRecognizer.onend = () => {
+      if (convRecognizer===recognizer && convActiveSpeaker === speaker) {
+        stopConvSpeech();
+      }
+    };
+
+    try {
+      convRecognizer.start();
+    } catch (e) {
+      convStatus('無法啟動麥克風：' + e.message);
+      stopConvSpeech();
+    }
+  } else {
+    alert('此瀏覽器不支援原生 Web Speech API，請使用 Chrome 桌面版進行語音收音，或使用手動打字發送。');
+    stopConvSpeech();
+  }
+}
+
+function stopConvSpeech() {
+  if (convRecognizer) {
+    const recognizer=convRecognizer;convRecognizer=null;
+    try { recognizer.stop(); } catch {}
+  }
+  convActiveSpeaker = null;
+  if ($('btnSpeakA')) $('btnSpeakA').classList.remove('recording');
+  if ($('btnSpeakB')) $('btnSpeakB').classList.remove('recording');
+  updateConvLabels();
+  convStatus('○ 準備就緒，點擊下方按鈕即可開口說話');
+}
+
+if ($('btnSpeakA')) $('btnSpeakA').onclick = () => toggleTalk('A');
+if ($('btnSpeakB')) $('btnSpeakB').onclick = () => toggleTalk('B');
+
+if ($('convClear')) {
+  $('convClear').onclick = () => {
+    if (convRecords.length && !confirm('確定清除目前的對話紀錄？')) return;
+    stopConvSpeech();convEpoch++;window.speechSynthesis?.cancel();
+    convRecords = [];
+    drawConvFeed();
+    convStatus('○ 對話紀錄已清空');
+  };
+}
+
+if ($('convExport')) {
+  $('convExport').onclick = () => {
+    if (!convRecords.length) {
+      alert('尚無對話紀錄可匯出');
+      return;
+    }
+    const text = '# 雙向即時口譯對話紀錄\n\n' +
+      convRecords.map(r => `### [${r.time}] ${r.speaker === 'A' ? '我方' : '對方'}\n- **原文**：${r.text}\n- **譯文**：${r.translation}\n`).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'text/markdown;charset=utf-8'}));
+    a.download = `conversation-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
+
+
+window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?.cancel();});

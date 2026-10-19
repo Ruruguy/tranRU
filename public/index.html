@@ -9,7 +9,8 @@
 <body>
   <nav class="topbar" aria-label="主要導覽">
     <a class="brand" href="/">▥ <span>tranRU</span></a>
-    <span class="nav active" aria-current="page">◉ 即時口譯</span>
+    <button class="nav active" id="navLecture">◉ 演講口譯</button>
+    <button class="nav" id="navConversation">⇄ 雙向對話</button>
     <div class="topbar-actions">
       <button id="settings">⚙ 服務設定</button>
       <button id="fullscreen">⛶ 全螢幕</button>
@@ -18,7 +19,8 @@
   <button id="exitCompact" class="exit-compact" hidden>退出專注顯示 · Esc</button>
 
   <main>
-    <header>
+    <div id="lectureView">
+      <header>
       <div>
         <div class="eyebrow">LIVE SIMULTANEOUS INTERPRETATION</div>
         <h1>專心聽，讓語言退到背景。</h1>
@@ -149,12 +151,93 @@
       自動備用啟用後，Gemini 中斷將改由 OpenAI 處理後續收音；切換期間的未完成字幕可能缺漏。
       線上演講請選取分頁並勾選「分享分頁音訊」。
     </p>
+    </div> <!-- end #lectureView -->
+
+    <div id="conversationView" class="conversation-view" style="display:none;">
+      <header class="conv-header">
+        <div>
+          <div class="eyebrow">BIDIRECTIONAL REAL-TIME DIALOGUE</div>
+          <h1>面對面雙向即時對話口譯</h1>
+          <p>商務交流、外語面試、跨國諮詢與一對一多語言自由對話。</p>
+        </div>
+        <div class="header-actions">
+          <label class="inline tts-toggle"><input id="convAutoTTS" type="checkbox" checked> 🔊 自動朗讀譯文</label>
+          <button id="convExport">↓ 匯出對話紀錄</button>
+          <button id="convClear">清空對話</button>
+        </div>
+      </header>
+
+      <section class="controls conv-controls">
+        <label>我方語言 (母語)
+          <select id="convLangA">
+            <option value="zh-TW" data-target="Traditional Chinese (Taiwan)" selected>繁體中文 · 台灣</option>
+            <option value="en-US" data-target="English">English</option>
+            <option value="ja-JP" data-target="Japanese">日本語</option>
+          </select>
+        </label>
+
+        <button class="conv-swap-btn" id="convSwapLangs" title="快速對調語言">⇄</button>
+
+        <label>對方語言 (外語)
+          <select id="convLangB">
+            <option value="en-US" data-target="English" selected>English · 英文</option>
+            <option value="ja-JP" data-target="Japanese">日本語 · 日文</option>
+            <option value="ko-KR" data-target="Korean">한국어 · 韓文</option>
+            <option value="es-ES" data-target="Spanish">Español · 西班牙文</option>
+            <option value="fr-FR" data-target="French">Français · 法文</option>
+            <option value="de-DE" data-target="German">Deutsch · 德文</option>
+            <option value="zh-TW" data-target="Traditional Chinese (Taiwan)">繁體中文</option>
+          </select>
+        </label>
+      </section>
+
+      <div class="statusbar conv-statusbar">
+        <span id="convStatus">○ 準備就緒，點擊下方按鈕即可開口說話</span>
+        <span id="convCount">0 則對話</span>
+      </div>
+
+      <section class="conv-feed-wrapper">
+        <div id="convFeed" class="conv-feed">
+          <div class="conv-empty">
+            <div class="sound">💬</div>
+            <h2>隨時開始自然雙向對話</h2>
+            <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="conv-input-panel">
+        <div class="conv-actions">
+          <button id="btnSpeakA" class="btn-talk btn-talk-a">
+            <span class="talk-mic">🗣️</span>
+            <div class="talk-labels">
+              <span class="talk-title" id="labelSpeakA">說中文 (我方)</span>
+              <small class="talk-sub">點擊說話 · 說完再點一下</small>
+            </div>
+          </button>
+
+          <button id="btnSpeakB" class="btn-talk btn-talk-b">
+            <span class="talk-mic">🌐</span>
+            <div class="talk-labels">
+              <span class="talk-title" id="labelSpeakB">說英文 (對方)</span>
+              <small class="talk-sub">點擊說話 · 說完再點一下</small>
+            </div>
+          </button>
+        </div>
+
+        <div class="conv-manual">
+          <input id="convTextInput" type="text" placeholder="手動打字輸入對話…">
+          <button id="convSendA" title="以我方身份發送並翻譯">我方送出</button>
+          <button id="convSendB" title="以對方身份發送並翻譯">對方送出</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <dialog id="dialog">
     <form method="dialog"><button class="close" aria-label="關閉">×</button></form>
     <h2>翻譯與辨識服務設定</h2>
-    <p>請填入你自己的 Gemini API 金鑰。金鑰僅暫存在本站伺服器上屬於你的工作階段記憶體，不寫入磁碟；閒置約 30 分鐘或伺服器重啟後需重填。只有設定與使用時會送往服務端，不會提供給其他訪客。</p>
+    <p id="keyDescription">請填入你自己的 Gemini API 金鑰。金鑰僅暫存在本站伺服器上屬於你的工作階段記憶體，不寫入磁碟；閒置約 30 分鐘或伺服器重啟後需重填。只有設定與使用時會送往服務端，不會提供給其他訪客。</p>
     
     <label>Gemini API 金鑰（主要服務）
       <input id="geminiKey" type="password" autocomplete="off" placeholder="貼上 Google AI Studio API 金鑰">
