@@ -14,3 +14,6 @@ coverage/
 transcripts/
 recordings/
 artifacts/
+
+dist/
+*.tar.gz
