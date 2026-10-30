@@ -122,6 +122,13 @@
       <span id="secondStatus" role="status"></span>
       <span id="thirdStatus" role="status"></span>
     </div>
+    <details class="medical-reference" open>
+      <summary>醫療與救護專業術語參考</summary>
+      <p>依講者原文顯示相關中英文詞彙，請依上下文確認。Gemini 即時口譯不直接套用詞庫；文字翻譯與摘要會參考相關術語。藥名、數字與處置請核對原文及在地指引。</p>
+      <label><input type="checkbox" id="medicalRefine"> Gemini 每段完成後以文字模型參考詞庫重新翻譯（可能增加延遲及 API 費用）</label>
+      <span id="medicalRefineStatus" role="status"></span>
+      <p id="medicalTerms" aria-live="polite">等待辨識到醫療或救護術語…</p>
+    </details>
     <div class="transcript-portal-wrap">
       <div id="ambientGlowPortal" class="ambient-glow-portal" aria-hidden="true"></div>
       <section class="transcript">
@@ -180,7 +187,8 @@
 - 甦醒球(BVM): Bag-Valve-Mask | バッグバルブマスク
 - 聲門上呼吸道: SGA / LMA (Laryngeal mask) | 声門上エアウェイ
 - 氣管插管: Endotracheal intubation (ETT) | 気管挿管・気管チューブ
-- 骨針(IO)/腎上腺素: IO (Intraosseous) / Epinephrine | 骨髄針・アドレナリン
+- 骨髓內通路: Intraosseous access (IO) | 骨髄路確保
+- 腎上腺素: Epinephrine | アドレナリン
 - 心肌梗塞/過敏性休克: AMI (Myocardial infarction) / Anaphylactic shock | 心筋梗塞・アナフィラキシー
 
 [消防滅火與搶救 Fire & Rescue]
@@ -191,7 +199,7 @@
 - 雲梯車/破壞器材: Aerial ladder truck / Forcible entry tools (Halligan) | はしご車・破壊器具
 - 熱顯像儀(TIC): Thermal Imaging Camera (TIC) | 熱画像直視装置
 - 火場/入室搜索: Fire scene / Interior search | 火災現場・屋内進入検索
-- 閃燃/爆燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
+- 閃燃/回燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
 - 局限空間/繩索救援: Confined space / Technical rope rescue | 閉鎖空間救助・ロープ救助
 
 [人員體系與大量傷患 EMS & Triage]

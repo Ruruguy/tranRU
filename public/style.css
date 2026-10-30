@@ -1223,3 +1223,7 @@ body.focus .second-panel #secondRows{max-height:45vh}
 .panel-head.triple-layout,.row.triple-layout { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .panel-head.triple-layout > :first-child,.row.triple-layout > :first-child { grid-column: 1 / -1; }
 .row.triple-layout .cell { min-width: 0; overflow-wrap: anywhere; }
+.medical-reference { margin: 8px 0 14px; padding: 10px 18px; border: 1px solid var(--border-ash); border-radius: 14px; color: var(--text-pale-mist); font-size: 13px; }
+.medical-reference summary { cursor: pointer; font-weight: 600; }
+.medical-reference p { margin: 8px 0 0; line-height: 1.5; }
+body.focus .medical-reference { display: none; }

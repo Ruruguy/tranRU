@@ -7,6 +7,7 @@ import {randomBytes} from 'node:crypto';
 import {summarize,selectSummaryRecords,summaryRows,summaryTerminal} from './public/summary-core.js';
 import {createBrowserAPI} from './public/api-client.js';
 import {SSEParser} from './public/gemini-client.js';
+import {medicalContext} from './public/medical-glossary.js';
 const row={sessionId:'current',state:'done',time:'01:02:03',text:'source',translation:'譯文'};
 const long=Array.from({length:201},(_,i)=>({...row,text:`ROW_${i}_ ${'字'.repeat(160)}${i===200?' END_MARKER':''}`}));
 const excluded=['demo','secondary','pending','error','old'].map(kind=>({...row,text:`EXCLUDE_${kind}`,demo:kind==='demo',secondary:kind==='secondary',state:['pending','error'].includes(kind)?kind:'done',sessionId:kind==='old'?'old':'current'}));
@@ -68,7 +69,7 @@ test('persistence reloads over 100 records and exposes a persistent quota warnin
 });
 test('summary UI sends current eligible records and only enables export on a successful final result',async()=>{
  const nodes=Object.fromEntries(['summaryDialog','summaryContent','copySummary','downloadSummary','context','target'].map(id=>[id,{value:id==='context'?'UI_CONTEXT':'',showModal(){}}]));let sent,message='';
- const sandbox={token:'test-token',records:[row,...excluded],summarySessionId:'current',selectSummaryRecords,SSEParser,TextDecoder,$:id=>nodes[id],status:s=>{message=s;},fetch:async(_,options)=>{sent=JSON.parse(options.body);return new Response(message||'event: done\ndata: {"summary":"完整摘要"}\n\n');}};
+ const sandbox={token:'test-token',records:[row,...excluded],summarySessionId:'current',selectSummaryRecords,medicalContext,SSEParser,TextDecoder,$:id=>nodes[id],status:s=>{message=s;},fetch:async(_,options)=>{sent=JSON.parse(options.body);return new Response(message||'event: done\ndata: {"summary":"完整摘要"}\n\n');}};
  vm.runInNewContext(app.slice(app.indexOf('async function generateSummary()'),app.indexOf("if ($('summaryBtn'))")),sandbox);
  await sandbox.generateSummary();assert.equal(sent.records.length,1);assert.equal(sent.context,'UI_CONTEXT');assert.equal(sent.sessionId,'current');assert.equal(nodes.summaryContent.textContent,'完整摘要');assert.equal(nodes.downloadSummary.disabled,false);
  message='event: delta\ndata: {"delta":"partial"}\n\n';await sandbox.generateSummary();assert.match(nodes.summaryContent.textContent,/中斷/);assert.doesNotMatch(nodes.summaryContent.textContent,/partial/);assert.equal(nodes.downloadSummary.disabled,true);assert.equal(nodes.copySummary.disabled,true);
