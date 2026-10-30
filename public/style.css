@@ -202,8 +202,9 @@ header p {
   border: 1px solid var(--border-ash);
   border-radius: 9999px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  border-radius: 24px;
 }
 
 .controls::-webkit-scrollbar {
@@ -723,22 +724,30 @@ dialog input:focus, dialog select:focus {
 }
 
 /* Fullscreen / Focus Mode */
+.lecture-actions label:has(#autoscroll),
+label:has(#autoscroll) {
+  display: none !important;
+}
+
 body.focus .topbar,
 body.focus header,
 body.focus details,
+body.focus .controls,
+body.focus .statusbar,
+body.focus .lecture-actions,
 body.focus .note {
-  display: none;
+  display: none !important;
 }
 
 body.focus main {
   margin: 0;
   width: 100%;
   max-width: none;
-  padding: 18px 24px;
+  padding: 16px 24px;
 }
 
 body.focus #rows {
-  height: calc(100vh - 220px);
+  height: calc(100vh - 80px) !important;
 }
 
 body.focus .controls {
@@ -1209,3 +1218,8 @@ body.focus .second-panel #secondRows{max-height:45vh}
   .conv-header .header-actions {flex-wrap:wrap}
   .conv-manual {flex-wrap:wrap}
 }
+
+/* 三種譯文：原文一整列，譯文在下一列並排。 */
+.panel-head.triple-layout,.row.triple-layout { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.panel-head.triple-layout > :first-child,.row.triple-layout > :first-child { grid-column: 1 / -1; }
+.row.triple-layout .cell { min-width: 0; overflow-wrap: anywhere; }
