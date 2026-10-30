@@ -401,7 +401,7 @@ const handle = async (req, res) => {
 
       if (req.url === '/api/gemini-live') {
         if (!geminiKey) return send(400, {error: '請先設定 Gemini API 金鑰'});
-        if (liveSessions.size >= 2) return send(409, {error: '已有 Gemini 工作階段，請先停止其他分頁'});
+        if (liveSessions.size >= 3) return send(409, {error: '已有三個 Gemini 翻譯連線，請先停止其他分頁'});
         const id = randomBytes(20).toString('hex');
         res.writeHead(200, {'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store','X-Accel-Buffering':'no'});
         res.flushHeaders();
@@ -586,7 +586,7 @@ const handle = async (req, res) => {
 
     if (req.method !== 'GET') return send(405, {error: '不支援此方法'});
 
-    const paths = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/gemini-client.js': 'gemini-client.js', '/service-errors.js': 'service-errors.js', '/api-client.js': 'api-client.js', '/gemini-wire.js': 'gemini-wire.js', '/summary-core.js': 'summary-core.js'};
+    const paths = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/gemini-client.js': 'gemini-client.js', '/service-errors.js': 'service-errors.js', '/api-client.js': 'api-client.js', '/gemini-wire.js': 'gemini-wire.js', '/summary-core.js': 'summary-core.js', '/traditional.js':'traditional.js', '/opencc-cn2t.js':'opencc-cn2t.js'};
     const file = paths[req.url];
     if (!file) return send(404, {error: '找不到檔案'});
 

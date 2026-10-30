@@ -43,3 +43,21 @@ test('hosted live bridge uses corrected setup and closes Google when consumer ca
  assert.equal(Socket.last.sent[0].setup.generationConfig.translationConfig.targetLanguageCode,'ja');
  await reader.cancel();assert.equal(Socket.last.closed,true);
 });
+test('three Gemini sessions can run together; a fourth is refused and slots recover',async()=>{
+ class Socket extends EventTarget{
+  constructor(){super();this.bufferedAmount=0;queueMicrotask(()=>this.dispatchEvent(new Event('open')));}
+  send(text){if(JSON.parse(text).setup)queueMicrotask(()=>this.dispatchEvent(new MessageEvent('message',{data:'{"setupComplete":{}}'})));}
+  close(){}
+ }
+ const api=createBrowserAPI({Socket});await api('/api/config',{body:JSON.stringify({geminiKey:'test-key'})});
+ const readers=[];
+ for(const target of ['Traditional Chinese (Taiwan)','English','Bengali']){
+  const response=await api('/api/gemini-live',{body:JSON.stringify({target})});assert.equal(response.status,200);
+  const reader=response.body.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/event: ready/);readers.push(reader);
+ }
+ assert.equal((await api('/api/gemini-live',{body:JSON.stringify({target:'Japanese'})})).status,409);
+ await readers[2].cancel();
+ const retry=await api('/api/gemini-live',{body:JSON.stringify({target:'Bengali'})});assert.equal(retry.status,200);
+ const retryReader=retry.body.getReader();await retryReader.read();await retryReader.cancel();
+ await Promise.all(readers.slice(0,2).map(reader=>reader.cancel()));
+});

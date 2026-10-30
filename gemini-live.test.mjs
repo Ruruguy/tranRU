@@ -28,6 +28,7 @@ class FakeSocket extends EventTarget {
 test('Gemini setup uses translation protocol, zh-Hant and no unsupported system prompt',()=>{
  const setup=translationSetup('Traditional Chinese (Taiwan)').setup;
  assert.equal(setup.generationConfig.translationConfig.targetLanguageCode,'zh-Hant');
+ assert.equal(setup.generationConfig.translationConfig.echoTargetLanguage,true);
  assert.deepEqual(setup.inputAudioTranscription,{});
  assert.deepEqual(setup.outputAudioTranscription,{});
  assert.equal(setup.generationConfig.inputAudioTranscription,undefined);

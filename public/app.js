@@ -2,6 +2,7 @@ import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
 import {GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
 import {selectSummaryRecords} from './summary-core.js';
+import {toTaiwanTranscript, isTraditionalChineseTarget} from './traditional.js';
 const $ = id => document.getElementById(id);
 
 let token = '';
@@ -308,7 +309,7 @@ setInterval(() => {
 // Persistence
 function persist() {
   try {
-    const serialized = records.map(({audio, ...r}) => ({
+    const serialized = records.map(({audio, _rawInput, _inputLanguage, _rawTranslation, ...r}) => ({
       ...r,
       state: r.state === 'streaming' || r.state === 'pending' ? 'error' : r.state,
       error: (r.state === 'streaming' || r.state === 'pending') ? '頁面關閉前未完成' : r.error
@@ -677,15 +678,18 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let completed = false;
+    let completed = false, translationRaw = '';
     const parser = new SSEParser((event, data) => {
       if(event === 'error')throw Error(data.error || '串流處理異常');
-      if(event === 'stt')record.text = data.text || '';
-      if(event === 'delta')record.translation = (record.translation || '') + (data.delta || '');
+      if(event === 'stt')record.text = toTaiwanTranscript(data.text || '', record.language);
+      if(event === 'delta'){
+        translationRaw += data.delta || '';
+        record.translation = isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(translationRaw,'zh') : translationRaw;
+      }
       if(event === 'done'){
         completed = true;
-        if(data.text !== undefined)record.text=data.text;
-        if(data.translation !== undefined)record.translation=data.translation;
+        if(data.text !== undefined)record.text=toTaiwanTranscript(data.text,record.language);
+        if(data.translation !== undefined)record.translation=isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(data.translation,'zh') : data.translation;
         record.state='done';record.audio=undefined;
       }
       updateStreamingRow(record);
@@ -708,7 +712,7 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
     record.state = 'error';
     const issue = classifyServiceError(err.message);
     record.error = issue.message;
-    if(record.secondary){$('secondStatus').textContent='第二語言翻譯失敗：'+issue.message;}
+    if(record.secondary){$(record.languageSlot===3?'thirdStatus':'secondStatus').textContent=(record.languageSlot===3?'第三':'第二')+'語言翻譯失敗：'+issue.message;}
     if(!record.secondary && issue.fatal && !openaiBlocked){
       openaiBlocked = true;
       // Discard the unsent tail before stop(), which otherwise flushes another request.
@@ -802,6 +806,8 @@ function startNativeSpeech() {
       }
     }
 
+    interimTranscript = toTaiwanTranscript(interimTranscript, $('language').value);
+    finalTranscript = toTaiwanTranscript(finalTranscript, $('language').value);
     if (interimTranscript) {
       updateAudioReactiveGlow(0.045, 0.12);
       if (!currentNativeRecord) {
@@ -949,7 +955,7 @@ async function translateFreeRecord(record) {
   updateStreamingRow(record);
   try {
     const translation = await translateFree(record.text, $('language').value, record.target);
-    record.translation = translation;
+    record.translation = isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(translation,'zh') : translation;
     record.state = 'done';
     updateStreamingRow(record);
     if (!record.secondary && record.secondTarget && record.text.trim() && !record.secondRequested) {
@@ -1072,6 +1078,16 @@ $('start').onclick = async () => {
       $('engine').value = 'vad';
     }
 
+    // Screen sharing must be requested directly from the click, before waiting
+    // for a network connection that can consume the browser's user activation.
+    stream = sourceVal === 'tab'
+      ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
+      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
+
+    if (!stream.getAudioTracks().length) {
+      throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
+    }
+
     if ($('engine').value === 'gemini') {
       status('○ 正在連線 Gemini…');
       gemini = new GeminiLiveClient({token,onEvent:handleGeminiEvent,onFailure:handleGeminiFailure});
@@ -1085,18 +1101,11 @@ $('start').onclick = async () => {
       catch(e){geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
     }
     if (gemini && $('dualTranslation').checked && $('tripleTranslation').checked) {
+      $('thirdStatus').textContent='正在連線第三語言…';
       geminiThird = new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,3),onFailure:error=>handleThirdFailure(error)});
-      try { await geminiThird.connect($('thirdTarget').value); }
-      catch(e) { geminiThird?.close();geminiThird=null; $('secondStatus').textContent='第三語言連線失敗：'+e.message; }
+      try { await geminiThird.connect($('thirdTarget').value); $('thirdStatus').textContent='第三語言已連線，等待音訊'; }
+      catch(e) { geminiThird?.close();geminiThird=null; $('thirdStatus').textContent='第三語言連線失敗：'+e.message; }
     }
-    stream = sourceVal === 'tab'
-      ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
-      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
-
-    if (!stream.getAudioTracks().length) {
-      throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
-    }
-
     // AudioContext for VU Meter & VAD
     ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate:16000});
     await ctx.resume();
@@ -1332,13 +1341,20 @@ function handleGeminiEvent(event,data,secondary=false) {
      for (const item of records) if(item.secondary && item.liveBatch===liveBatch && item.liveTurn===turn && !item.parentId) item.parentId=r.id;
    }
  }
- if(event==='input')r.text+=data.text;else r.translation+=data.text;
- if(secondary)$('secondStatus').textContent='● 第二語言即時翻譯中';
+ if(event==='input') {
+   r._rawInput=(r._rawInput||'')+data.text;
+   if(data.languageCode)r._inputLanguage=data.languageCode;
+   r.text=toTaiwanTranscript(r._rawInput,r._inputLanguage||r.language);
+ } else {
+   r._rawTranslation=(r._rawTranslation||'')+data.text;
+   r.translation=isTraditionalChineseTarget(r.target) ? toTaiwanTranscript(r._rawTranslation,'zh') : r._rawTranslation;
+ }
+ if(secondary)$(secondary===3?'thirdStatus':'secondStatus').textContent=secondary===3?'● 第三語言即時翻譯中':'● 第二語言即時翻譯中';
  updateStreamingRow(r);
 }
 function handleThirdFailure(error){
  geminiThird?.close();geminiThird=null;finishLiveRecord(true,3);
- $('secondStatus').textContent='第三語言已中斷：'+error.message;
+ $('thirdStatus').textContent='第三語言已中斷：'+error.message;
 }
 function handleSecondFailure(error){
  geminiSecond?.close();geminiSecond=null;finishLiveRecord(true,true);
