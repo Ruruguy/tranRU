@@ -899,7 +899,7 @@ body.pip-mode {
 .dual-options{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin:15px 0;color:var(--text-pale-mist)}
 .dual-options>label{flex:0 1 auto}.dual-options small{font-size:11px;line-height:1.7;color:var(--text-smoke)}
 .dual-options select{width:auto;min-width:150px;margin-left:10px}
-.second-panel{margin-top:24px}#secondRows{max-height:360px;overflow:auto}#secondStatus{font-size:12px;color:var(--text-smoke);margin:12px 24px}
+.second-panel{margin-top:24px}#secondRows{max-height:360px;overflow:auto}#secondStatus,#thirdStatus{font-size:12px;color:var(--text-smoke);margin:12px 24px}
 body.focus .second-panel #secondRows{max-height:45vh}
 
 :fullscreen .topbar {display:none}
