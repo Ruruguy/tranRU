@@ -1,5 +1,7 @@
 # tranRU · 演講即時翻譯
 
+**直接使用：[開啟 tranRU](https://ruruguy.github.io/tranRU/)**。GitHub 儲存庫頁面顯示的是程式碼；網站使用者可自行輸入 Gemini API 金鑰。
+
 支援本機或 HTTPS 部署的雙欄字幕工具，支援 Gemini 即時翻譯與 OpenAI 備用。需要 Node.js 22 以上，無須安裝外部套件。
 
 ## 啟動與設定
