@@ -1,6 +1,7 @@
 import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
 import {GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
+import {selectSummaryRecords} from './summary-core.js';
 const $ = id => document.getElementById(id);
 
 let token = '';
@@ -9,7 +10,7 @@ let openaiBlocked = false;
 let openaiConfigured = false, geminiConfigured = false;
 let gemini = null, pcm = null, liveRecord = null;
 let geminiSecond = null, secondLiveRecord = null;
-const canStart = () => $('engine').value === 'gemini' ? geminiConfigured : (openaiConfigured || geminiConfigured);
+const canStart = () => $('engine').value === 'free' ? true : $('engine').value === 'gemini' ? geminiConfigured : (openaiConfigured || geminiConfigured);
 function updateKeys(s) {
  openaiConfigured = s.openaiConfigured ?? s.configured; geminiConfigured = !!s.geminiConfigured; configured = openaiConfigured || geminiConfigured;
  if ($('keyStatus')) $('keyStatus').textContent = `Gemini：${geminiConfigured ? '已設定' : '未設定'}；OpenAI：${openaiConfigured ? '已設定' : '未設定'}`;
@@ -33,6 +34,7 @@ let session = 0;
 let startTime = 0;
 let elapsed = 0;
 let records = [];
+let summarySessionId = 'legacy';
 let pipWindow = null;
 let speechRecognizer = null;
 let currentNativeRecord = null;
@@ -53,7 +55,13 @@ try {
 
 // Settings Dialog
 $('settings').onclick = () => $('dialog').showModal();
-$('engine').onchange = () => status(canStart() ? '○ 準備就緒' : '○ 請先設定所選服務的 API 金鑰');
+$('engine').onchange = () => {
+  if ($('engine').value === 'free') {
+    status('○ 準備就緒（免金鑰即時模式）');
+  } else {
+    status(canStart() ? '○ 準備就緒' : '○ 請先設定所選服務的 API 金鑰');
+  }
+};
 $('save').onclick = async () => {
   try {
     const res = await fetch('/api/config', {
@@ -106,35 +114,176 @@ $('checkGemini').onclick = async () => {
 };
 
 function syncDualUI() {
- const enabled=$('dualTranslation').checked;
- $('secondTargetLabel').hidden=!enabled;$('dualHint').hidden=!enabled;
- $('secondPanel').hidden=!enabled;
- $('secondTitle').textContent='第二語言譯文 · '+$('secondTarget').selectedOptions[0].textContent;
+  const enabled = $('dualTranslation') ? $('dualTranslation').checked : false;
+  if ($('secondTargetLabel')) $('secondTargetLabel').hidden = !enabled;
+  if ($('dualHint')) $('dualHint').hidden = !enabled;
+  if ($('secondPanel')) $('secondPanel').hidden = true;
+
+  const panelHead = $('panelHead');
+  const colHeadTarget2 = $('colHeadTarget2');
+  if (panelHead && colHeadTarget2) {
+    if (enabled) {
+      panelHead.classList.add('dual-3col');
+      colHeadTarget2.hidden = false;
+      const t1 = $('target')?.selectedOptions?.[0]?.textContent || $('target')?.value || '即時口譯';
+      const t2 = $('secondTarget')?.selectedOptions?.[0]?.textContent || $('secondTarget')?.value || '第二語言';
+      if ($('colHeadSpeaker')) $('colHeadSpeaker').innerHTML = `講者原文 <small>SPEAKER</small>`;
+      if ($('colHeadTarget1')) $('colHeadTarget1').innerHTML = `翻譯語言 · ${escapeHtml(t1)} <small id="headTarget1">TARGET 1</small>`;
+      if ($('colHeadTarget2')) $('colHeadTarget2').innerHTML = `另選語言 · ${escapeHtml(t2)} <small id="headTarget2">TARGET 2</small>`;
+    } else {
+      panelHead.classList.remove('dual-3col');
+      colHeadTarget2.hidden = true;
+      const t1 = $('target')?.selectedOptions?.[0]?.textContent || $('target')?.value || '即時口譯';
+      if ($('colHeadSpeaker')) $('colHeadSpeaker').innerHTML = `講者原文 <small>ORIGINAL SPEECH</small>`;
+      if ($('colHeadTarget1')) $('colHeadTarget1').innerHTML = `即時口譯 <small id="headTarget1">${escapeHtml(t1.toUpperCase())}</small>`;
+    }
+  }
+  if (typeof draw === 'function') draw();
 }
-$('dualTranslation').onchange=syncDualUI;
-$('secondTarget').onchange=syncDualUI;
+if ($('dualTranslation')) $('dualTranslation').onchange = syncDualUI;
+if ($('secondTarget')) $('secondTarget').onchange = syncDualUI;
+if ($('target')) $('target').addEventListener('change', syncDualUI);
+syncDualUI();
 
 // UI Controls
-$('font').oninput = () => document.documentElement.style.setProperty('--subtitle', $('font').value + 'px');
-function syncCompactControls(){
- $('exitCompact').hidden=!document.body.classList.contains('focus')&&!document.fullscreenElement;
+if ($('font')) $('font').oninput = () => document.documentElement.style.setProperty('--subtitle', $('font').value + 'px');
+function syncCompactControls() {
+  if ($('exitCompact')) {
+    $('exitCompact').hidden = !document.body.classList.contains('focus') && !document.fullscreenElement;
+  }
 }
-$('focus').onclick=()=>{document.body.classList.toggle('focus');syncCompactControls();};
-$('fullscreen').onclick=async()=>{
- try {
-  if(document.fullscreenElement)await document.exitFullscreen();
-  else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();
-  else {document.body.classList.add('focus');status('此瀏覽器不支援網頁全螢幕，已開啟演講模式');}
- }catch{document.body.classList.add('focus');status('已開啟演講模式；可使用瀏覽器的全螢幕功能');}
- syncCompactControls();
-};
-$('exitCompact').onclick=async()=>{
- document.body.classList.remove('focus');
- if(document.fullscreenElement)await document.exitFullscreen().catch(()=>{});
- syncCompactControls();
-};
-document.addEventListener('fullscreenchange',syncCompactControls);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.body.classList.remove('focus');syncCompactControls();}});
+if ($('focus')) {
+  $('focus').onclick = async () => {
+    const isFocus = document.body.classList.toggle('focus');
+    try {
+      if (isFocus) {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch {}
+    syncCompactControls();
+  };
+}
+if ($('fullscreen')) {
+  $('fullscreen').onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else { document.body.classList.add('focus'); status('已開啟演講模式'); }
+    } catch {
+      document.body.classList.add('focus');
+      status('已開啟演講模式');
+    }
+    syncCompactControls();
+  };
+}
+if ($('exitCompact')) {
+  $('exitCompact').onclick = async () => {
+    document.body.classList.remove('focus');
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    syncCompactControls();
+  };
+}
+document.addEventListener('fullscreenchange', syncCompactControls);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.body.classList.remove('focus');
+    syncCompactControls();
+  }
+});
+
+// Audio-Reactive Voice Glow (演講過程隨聲調輕微光影波動)
+let voiceGlowEnabled = localStorage.getItem('tranru_voice_glow') !== 'false';
+let currentGlowOpacity = 0.28;
+let currentGlowScale = 1.0;
+let currentGlowSpread = 44;
+let currentGlowHue = 242;
+
+let targetGlowOpacity = 0.28;
+let targetGlowScale = 1.0;
+let targetGlowSpread = 44;
+let targetGlowHue = 242;
+
+function syncVoiceGlowBtn() {
+  const btn = $('btnVoiceGlow');
+  if (!btn) return;
+  if (voiceGlowEnabled) {
+    btn.classList.add('active');
+    btn.textContent = '✨ 聲波光影 ON';
+    btn.setAttribute('aria-pressed', 'true');
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '✨ 聲波光影 OFF';
+    btn.setAttribute('aria-pressed', 'false');
+  }
+}
+
+function updateAudioReactiveGlow(rms, zcr) {
+  if (!voiceGlowEnabled) return;
+  if (rms > 0.005) {
+    const normalizedEnergy = Math.min(1.0, Math.pow(rms * 9.5, 0.78));
+    targetGlowOpacity = Math.min(0.85, 0.28 + normalizedEnergy * 0.55);
+    targetGlowScale = 1.0 + Math.min(0.065, normalizedEnergy * 0.065);
+    targetGlowSpread = 44 + Math.min(75, normalizedEnergy * 70);
+    // Dynamic hue shift responding to speech tone/pitch frequency proxy (zcr)
+    const pitchShift = Math.max(-14, Math.min(38, ((zcr || 0.08) - 0.06) * 320));
+    targetGlowHue = 242 + pitchShift;
+  }
+}
+
+function initVoiceGlow() {
+  const btn = $('btnVoiceGlow');
+  if (btn) {
+    syncVoiceGlowBtn();
+    btn.onclick = () => {
+      voiceGlowEnabled = !voiceGlowEnabled;
+      localStorage.setItem('tranru_voice_glow', voiceGlowEnabled ? 'true' : 'false');
+      syncVoiceGlowBtn();
+    };
+  }
+
+  function renderVoiceGlowLoop() {
+    if (!voiceGlowEnabled) {
+      targetGlowOpacity = 0;
+      targetGlowScale = 1.0;
+      targetGlowSpread = 30;
+    }
+
+    const lerpFactor = 0.14;
+    currentGlowOpacity += (targetGlowOpacity - currentGlowOpacity) * lerpFactor;
+    currentGlowScale += (targetGlowScale - currentGlowScale) * (lerpFactor * 0.85);
+    currentGlowSpread += (targetGlowSpread - currentGlowSpread) * lerpFactor;
+    currentGlowHue += (targetGlowHue - currentGlowHue) * (lerpFactor * 0.7);
+
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--voice-glow-opacity', currentGlowOpacity.toFixed(3));
+    rootStyle.setProperty('--voice-glow-scale', currentGlowScale.toFixed(3));
+    rootStyle.setProperty('--voice-glow-spread', currentGlowSpread.toFixed(1) + 'px');
+    rootStyle.setProperty('--voice-glow-hue', currentGlowHue.toFixed(1) + 'deg');
+
+    if (voiceGlowEnabled) {
+      if (running || convActiveSpeaker) {
+        targetGlowOpacity += (0.24 - targetGlowOpacity) * 0.08;
+        targetGlowScale += (1.0 - targetGlowScale) * 0.08;
+        targetGlowSpread += (44 - targetGlowSpread) * 0.08;
+        targetGlowHue += (242 - targetGlowHue) * 0.05;
+      } else {
+        targetGlowOpacity += (0.16 - targetGlowOpacity) * 0.05;
+        targetGlowScale += (1.0 - targetGlowScale) * 0.05;
+        targetGlowSpread += (36 - targetGlowSpread) * 0.05;
+      }
+    }
+
+    requestAnimationFrame(renderVoiceGlowLoop);
+  }
+  requestAnimationFrame(renderVoiceGlowLoop);
+}
+initVoiceGlow();
 
 // Update Clock
 function formatTime() {
@@ -148,14 +297,20 @@ setInterval(() => {
 // Persistence
 function persist() {
   try {
-    const serialized = records.slice(-100).map(({audio, ...r}) => ({
+    const serialized = records.map(({audio, ...r}) => ({
       ...r,
       state: r.state === 'streaming' || r.state === 'pending' ? 'error' : r.state,
       error: (r.state === 'streaming' || r.state === 'pending') ? '頁面關閉前未完成' : r.error
     }));
     localStorage.setItem('lecture-lens-transcript', JSON.stringify(serialized));
+    $('storageWarning')?.remove();
   } catch {
-    status('瀏覽器儲存空間不足，請匯出逐字稿。');
+    if (!$('storageWarning')) {
+      const warning=document.createElement('div');warning.id='storageWarning';warning.setAttribute('role','alert');
+      warning.textContent='⚠ 逐字稿未完整儲存：瀏覽器空間不足或禁止儲存，請立即匯出逐字稿後再關閉頁面。';
+      warning.style.cssText='position:sticky;top:0;z-index:9999;background:#8b1616;color:white;padding:16px;font-weight:bold';
+      document.body.prepend(warning);
+    }
   }
 }
 
@@ -163,6 +318,8 @@ function persist() {
 try {
   records = JSON.parse(localStorage.getItem('lecture-lens-transcript') || '[]');
   if (!Array.isArray(records)) records = [];
+  records=records.map(r=>({...r,sessionId:r.sessionId||'legacy'}));
+  summarySessionId=records.findLast(r=>!r.secondary && !r.demo)?.sessionId||'legacy';
   if (records.length) draw();
 } catch {
   records = [];
@@ -180,8 +337,10 @@ function draw() {
   const el = $('rows');
   const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   el.replaceChildren();
-  $('secondRows').replaceChildren();
-  $('secondPanel').hidden=!$('dualTranslation').checked;
+  if ($('secondRows')) $('secondRows').replaceChildren();
+  if ($('secondPanel')) $('secondPanel').hidden = true;
+
+  const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
 
   if (!records.length) {
     const empty = document.createElement('div');
@@ -189,7 +348,7 @@ function draw() {
     empty.innerHTML = `
       <div class="sound">▂ ▅ ▃ ▇ ▅ ▂ ▄</div>
       <h2>把注意力，留給演講。</h2>
-      <p>選擇 Gemini 即時翻譯，或使用 OpenAI 備用。<br>原文與譯文將在這裡呈現。</p>
+      <p>選擇 Gemini 即時翻譯，或使用免金鑰/OpenAI 模式。<br>原文與譯文將在這裡呈現。</p>
       <button id="demoBtn">先看看字幕示範 ↗</button>
     `;
     empty.querySelector('#demoBtn').onclick = injectDemo;
@@ -198,15 +357,23 @@ function draw() {
     return;
   }
 
-  for (const r of records) {
+  const primaryRecords = records.filter(r => !r.secondary);
+
+  for (const r of primaryRecords) {
+    const sec = isDual
+      ? records.find(s => s.secondary && (s.parentId === r.id || (!s.parentId && s.id === r.secondId) || (!s.parentId && s.time === r.time && s.sessionId === r.sessionId)))
+      : null;
+
     const row = document.createElement('div');
-    row.className = 'row' + (r.state === 'streaming' || r.state === 'pending' ? ' live-active' : '');
+    const isStreaming = r.state === 'streaming' || r.state === 'pending' || (sec && (sec.state === 'streaming' || sec.state === 'pending'));
+    row.className = (isDual ? 'row row-dual-3col' : 'row') + (isStreaming ? ' live-active' : '');
     row.id = 'row-' + r.id;
 
+    // 1st Column: 講者原文
     const cellA = document.createElement('div');
     cellA.className = 'cell';
     const timeElem = document.createElement('time');
-    timeElem.textContent = r.time + (r.demo ? ' · 示範' : '') + (r.secondary ? ' · '+r.target : '');
+    timeElem.textContent = r.time + (r.demo ? ' · 示範' : '');
     cellA.append(timeElem);
 
     if (r.text) {
@@ -220,6 +387,7 @@ function draw() {
       cellA.append(document.createTextNode(r.state === 'error' ? '未取得原文（服務請求失敗）' : '正在辨識演講語音…'));
     }
 
+    // 2nd Column: 翻譯為（目標語言 1）
     const cellB = document.createElement('div');
     cellB.className = 'cell';
 
@@ -245,10 +413,39 @@ function draw() {
     }
 
     row.append(cellA, cellB);
-    (r.secondary ? $('secondRows') : el).append(row);
+
+    // 3rd Column: 另一個選擇的語言（目標語言 2）
+    if (isDual) {
+      const cellC = document.createElement('div');
+      cellC.className = 'cell';
+      if (sec) {
+        if (sec.state === 'pending' && !sec.translation) {
+          cellC.textContent = '準備第二語言…';
+        } else if (sec.state === 'streaming') {
+          cellC.textContent = sec.translation || '';
+          const cursor = document.createElement('span');
+          cursor.className = 'streaming-cursor';
+          cellC.append(cursor);
+        } else if (sec.state === 'error') {
+          cellC.classList.add('failed');
+          cellC.textContent = classifyServiceError(sec.error).message || '第二語言失敗';
+        } else {
+          cellC.textContent = sec.translation || '';
+        }
+      } else {
+        if (r.state === 'pending' || r.state === 'streaming') {
+          cellC.textContent = '等待第二語言…';
+        } else {
+          cellC.textContent = r.secondTranslation || '';
+        }
+      }
+      row.append(cellC);
+    }
+
+    el.append(row);
   }
 
-  $('count').textContent = records.length;
+  $('count').textContent = primaryRecords.length;
   if ($('autoscroll').checked && nearBottom) {
     el.scrollTop = el.scrollHeight;
   }
@@ -256,44 +453,108 @@ function draw() {
 }
 
 function updateStreamingRow(record) {
-  const row = $('row-' + record.id);
-  if (!row) {
-    draw();
-    return;
-  }
+  let row = null;
+  const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
 
-  const cells = row.querySelectorAll('.cell');
-  if (cells.length >= 2) {
-    // Original cell
-    if (record.text) {
-      const timeElem = cells[0].querySelector('time');
-      cells[0].replaceChildren(timeElem || '', document.createTextNode(record.text));
-    } else if (record.interim) {
-      const timeElem = cells[0].querySelector('time');
-      const interimSpan = document.createElement('span');
-      interimSpan.className = 'interim-text';
-      interimSpan.textContent = record.interim;
-      cells[0].replaceChildren(timeElem || '', interimSpan);
+  if (record.secondary) {
+    if (record.parentId) {
+      row = $('row-' + record.parentId);
     }
+    if (!row) {
+      const primary = records.find(r => !r.secondary && (r.id === record.parentId || (r.time === record.time && r.sessionId === record.sessionId)));
+      if (primary) row = $('row-' + primary.id);
+    }
+    if (!row) {
+      draw();
+      return;
+    }
+    const cells = row.querySelectorAll('.cell');
+    if (cells.length >= 3) {
+      if (record.state === 'streaming') {
+        cells[2].textContent = record.translation || '';
+        const cursor = document.createElement('span');
+        cursor.className = 'streaming-cursor';
+        cells[2].append(cursor);
+        row.classList.add('live-active');
+      } else if (record.state === 'done') {
+        cells[2].textContent = record.translation || '';
+        const primary = records.find(r => !r.secondary && r.id === (record.parentId || row.id.replace('row-', '')));
+        if (!primary || primary.state === 'done' || primary.state === 'error') {
+          row.classList.remove('live-active');
+        }
+      } else if (record.state === 'error') {
+        cells[2].classList.add('failed');
+        cells[2].textContent = record.error || '第二語言失敗';
+        const primary = records.find(r => !r.secondary && r.id === (record.parentId || row.id.replace('row-', '')));
+        if (!primary || primary.state === 'done' || primary.state === 'error') {
+          row.classList.remove('live-active');
+        }
+      }
+    }
+  } else {
+    row = $('row-' + record.id);
+    if (!row) {
+      draw();
+      return;
+    }
+    const cells = row.querySelectorAll('.cell');
+    if (cells.length >= 2) {
+      // Original cell
+      if (record.text) {
+        const timeElem = cells[0].querySelector('time');
+        cells[0].replaceChildren(timeElem || '', document.createTextNode(record.text));
+      } else if (record.interim) {
+        const timeElem = cells[0].querySelector('time');
+        const interimSpan = document.createElement('span');
+        interimSpan.className = 'interim-text';
+        interimSpan.textContent = record.interim;
+        cells[0].replaceChildren(timeElem || '', interimSpan);
+      }
 
-    // Translation cell
-    if (record.state === 'streaming') {
-      cells[1].textContent = record.translation || '';
-      const cursor = document.createElement('span');
-      cursor.className = 'streaming-cursor';
-      cells[1].append(cursor);
-    } else if (record.state === 'done') {
-      cells[1].textContent = record.translation || '';
-      row.classList.remove('live-active');
-    } else if (record.state === 'error') {
-      cells[1].classList.add('failed');
-      cells[1].textContent = record.error || '失敗';
-      row.classList.remove('live-active');
+      // Translation cell 1
+      if (record.state === 'streaming') {
+        cells[1].textContent = record.translation || '';
+        const cursor = document.createElement('span');
+        cursor.className = 'streaming-cursor';
+        cells[1].append(cursor);
+        row.classList.add('live-active');
+      } else if (record.state === 'done') {
+        cells[1].textContent = record.translation || '';
+        const sec = records.find(s => s.secondary && s.parentId === record.id);
+        if (!sec || sec.state === 'done' || sec.state === 'error') {
+          row.classList.remove('live-active');
+        }
+      } else if (record.state === 'error') {
+        cells[1].classList.add('failed');
+        cells[1].textContent = record.error || '失敗';
+        const sec = records.find(s => s.secondary && s.parentId === record.id);
+        if (!sec || sec.state === 'done' || sec.state === 'error') {
+          row.classList.remove('live-active');
+        }
+      }
+
+      // Translation cell 2 if exists
+      if (cells.length >= 3) {
+        const sec = records.find(s => s.secondary && s.parentId === record.id);
+        if (sec) {
+          if (sec.state === 'streaming') {
+            cells[2].textContent = sec.translation || '';
+            const cursor = document.createElement('span');
+            cursor.className = 'streaming-cursor';
+            cells[2].append(cursor);
+          } else if (sec.state === 'done') {
+            cells[2].textContent = sec.translation || '';
+          } else if (sec.state === 'error') {
+            cells[2].classList.add('failed');
+            cells[2].textContent = sec.error || '第二語言失敗';
+          }
+        }
+      }
     }
   }
 
   if ($('autoscroll').checked) {
-    const el = record.secondary ? $('secondRows') : $('rows');
+    const el = $('rows');
     el.scrollTop = el.scrollHeight;
   }
   if (typeof updatePiP === 'function') updatePiP();
@@ -302,6 +563,7 @@ function updateStreamingRow(record) {
 function newRecord(data) {
   const r = {
     id: crypto.randomUUID(),
+    sessionId: summarySessionId,
     time: formatTime(),
     state: 'pending',
     text: '',
@@ -412,7 +674,7 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
     if(!completed)throw Error('翻譯串流提早中斷，請重試此段');
     if(!record.secondary && record.secondTarget && record.text.trim() && !record.secondRequested){
       record.secondRequested=true;
-      const second=newRecord({secondary:true,parentId:record.id,text:record.text,target:record.secondTarget,secondTarget:null});
+      const second=newRecord({secondary:true,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.secondTarget,secondTarget:null});
       streamRecord(second,'translate-stream',{text:second.text,target:second.target,context:second.context,history:[]});
     }
     if(!record.text.trim() && !record.translation.trim()){records=records.filter(r=>r!==record);draw();}
@@ -464,7 +726,9 @@ function retryRecord(r) {
   r.state = 'pending';
   r.error = undefined;
   draw();
-  if (r.audio) {
+  if (r.engine === 'free' && r.text) {
+    translateFreeRecord(r);
+  } else if (r.audio) {
     streamRecord(r, 'audio-stream');
   } else if (r.text) {
     streamRecord(r, 'translate-stream', {
@@ -513,6 +777,7 @@ function startNativeSpeech() {
     }
 
     if (interimTranscript) {
+      updateAudioReactiveGlow(0.045, 0.12);
       if (!currentNativeRecord) {
         currentNativeRecord = newRecord({interim: interimTranscript});
       } else {
@@ -528,12 +793,16 @@ function startNativeSpeech() {
       rec.interim = '';
       rec.state = 'pending';
       updateStreamingRow(rec);
-      streamRecord(rec, 'translate-stream', {
-        text: rec.text,
-        target: rec.target,
-        context: rec.context,
-        history: getRecentHistory()
-      });
+      if ($('engine').value === 'free') {
+        translateFreeRecord(rec);
+      } else {
+        streamRecord(rec, 'translate-stream', {
+          text: rec.text,
+          target: rec.target,
+          context: rec.context,
+          history: getRecentHistory()
+        });
+      }
     }
   };
 
@@ -544,7 +813,7 @@ function startNativeSpeech() {
   };
 
   speechRecognizer.onend = () => {
-    if (running && $('engine').value === 'native') {
+    if (running && ($('engine').value === 'native' || $('engine').value === 'free')) {
       try {
         speechRecognizer.start();
       } catch {}
@@ -552,6 +821,131 @@ function startNativeSpeech() {
   };
 
   speechRecognizer.start();
+}
+
+// Free Non-API Translation (免金鑰即時翻譯：Chrome 內建 AI 翻譯 / 免費網頁翻譯)
+function mapToGoogleLang(langStr) {
+  if (!langStr) return 'auto';
+  const l = String(langStr).trim().toLowerCase();
+  const aliases = {'traditional chinese (taiwan)':'zh-TW','chinese':'zh-TW','中文':'zh-TW','繁體中文':'zh-TW',english:'en',japanese:'ja','日文':'ja',korean:'ko','韓文':'ko',spanish:'es','西班牙文':'es',french:'fr','法文':'fr',german:'de','德文':'de'};
+  if (aliases[l]) return aliases[l];
+  const base = l.split('-')[0];
+  return ({zh:'zh-TW',en:'en',ja:'ja',ko:'ko',es:'es',fr:'fr',de:'de'})[base] || 'auto';
+}
+
+function applyGlossaryToText(text, sourceLang, targetLang) {
+  const rawGlossary = $('context')?.value || '';
+  if (!rawGlossary.trim() || !text) return text;
+  let out = text;
+  const isZhSource = sourceLang === 'zh-TW' || sourceLang === 'zh';
+  const isZhTarget = targetLang === 'zh-TW' || targetLang === 'zh';
+  const lines = rawGlossary.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('[') || trimmed.startsWith('【')) continue;
+    if (trimmed.includes('=')) {
+      const parts = trimmed.split('=');
+      const zh = parts[0]?.trim();
+      const en = parts[1]?.trim();
+      if (zh && en) {
+        if (isZhSource) out = out.split(zh).join(' ' + en + ' ');
+        else if (isZhTarget) out = out.replace(new RegExp('\\b' + en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), zh);
+      }
+    } else if (trimmed.startsWith('-')) {
+      const match = trimmed.match(/^-\s*([^:]+):\s*([^|]+)(?:\|\s*(.+))?$/);
+      if (match) {
+        const zh = match[1]?.trim();
+        const en = match[2]?.split('/')[0]?.trim();
+        const ja = match[3]?.split('・')[0]?.trim();
+        if (zh && en) {
+          if (isZhSource && (targetLang === 'en' || targetLang === 'en-US')) out = out.split(zh).join(' ' + en + ' ');
+          else if (isZhSource && targetLang === 'ja' && ja) out = out.split(zh).join(' ' + ja + ' ');
+        }
+      }
+    }
+  }
+  return out.replace(/\s{2,}/g, ' ').trim();
+}
+
+async function translateWithChromeAI(text, sourceLangCode, targetLangCode) {
+  if (typeof window !== 'undefined' && 'Translator' in window) {
+    try {
+      const avail = await window.Translator.availability({
+        sourceLanguage: sourceLangCode,
+        targetLanguage: targetLangCode
+      });
+      if (avail === 'readily' || avail === 'available') {
+        const tr = await window.Translator.create({
+          sourceLanguage: sourceLangCode,
+          targetLanguage: targetLangCode
+        });
+        return await tr.translate(text);
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function translateFree(text, sourceLang, targetLang) {
+  const s = mapToGoogleLang(sourceLang);
+  const t = mapToGoogleLang(targetLang);
+  const preparedText = applyGlossaryToText(text, s, t);
+
+  const chromeResult = await translateWithChromeAI(preparedText, s === 'zh-TW' ? 'zh-Hant' : s, t === 'zh-TW' ? 'zh-Hant' : t);
+  if (chromeResult) return chromeResult;
+
+  try {
+    const res = await fetch('/api/free-translate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Session-Token': token},
+      body: JSON.stringify({
+        text: preparedText,
+        source: s,
+        target: t
+      })
+    });
+    if (!res.ok) throw new Error('免費翻譯端點回應 ' + res.status);
+    const data = await res.json();
+    return data.translation;
+  } catch {
+    const directUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=${s}&tl=${t}&q=${encodeURIComponent(preparedText)}`;
+    const dRes = await globalThis.fetch(directUrl);
+    if (!dRes.ok) throw new Error('免費翻譯連線失敗 HTTP ' + dRes.status);
+    const j = await dRes.json();
+    return (j[0] || []).map(x => x[0]).join('');
+  }
+}
+
+async function translateFreeRecord(record) {
+  record.engine = 'free';
+  record.translation = '';
+  record.state = 'streaming';
+  updateStreamingRow(record);
+  try {
+    const translation = await translateFree(record.text, $('language').value, record.target);
+    record.translation = translation;
+    record.state = 'done';
+    updateStreamingRow(record);
+    if (!record.secondary && record.secondTarget && record.text.trim() && !record.secondRequested) {
+      record.secondRequested = true;
+      const second = newRecord({
+        secondary: true,
+        sessionId: record.sessionId,
+        parentId: record.id,
+        text: record.text,
+        target: record.secondTarget,
+        secondTarget: null
+      });
+      translateFreeRecord(second);
+    }
+    persist();
+  } catch (err) {
+    record.state = 'error';
+    record.error = `免費翻譯失敗：${err.message}`;
+    record.translation = '';
+    updateStreamingRow(record);
+    persist();
+  }
 }
 
 // Stop Everything
@@ -618,6 +1012,12 @@ $('start').onclick = async () => {
   }
 
   if($('dualTranslation').checked && $('target').value === $('secondTarget').value){status('請選擇兩種不同的目標語言');return;}
+  if ($('engine').value === 'free' && $('source').value === 'tab') {
+    status('免金鑰模式僅支援麥克風；分頁音訊請選 Gemini 或 OpenAI。');return;
+  }
+  if (['free','native'].includes($('engine').value) && $('language').value === 'auto') {
+    status('瀏覽器語音辨識不支援自動偵測，請選擇演講語言。');return;
+  }
   starting = true;
   for(const id of ['source','engine','language','target','dualTranslation','secondTarget'])$(id).disabled=true;
   $('start').disabled = true;
@@ -688,17 +1088,25 @@ $('start').onclick = async () => {
       const input = e.inputBuffer.getChannelData(0);
       const copy = new Float32Array(input);
 
-      // Volume & VU Meter calculation
+      // Volume & VU Meter calculation + Voice Tone Zero-Crossing calculation
       let sum = 0;
+      let zeroCrossings = 0;
       for (let i = 0; i < copy.length; i++) {
         sum += copy[i] * copy[i];
+        if (i > 0 && ((copy[i] >= 0 && copy[i - 1] < 0) || (copy[i] < 0 && copy[i - 1] >= 0))) {
+          zeroCrossings++;
+        }
       }
       const rms = Math.sqrt(sum / copy.length);
+      const zcr = zeroCrossings / copy.length;
       const meterPercent = Math.min(100, Math.round(rms * 450));
       $('meterFill').style.width = meterPercent + '%';
 
+      // Audio-reactive ambient light ripples (動態聲波光影波動)
+      updateAudioReactiveGlow(rms, zcr);
+
       if (gemini) {for(const chunk of pcm.push(copy)){gemini?.send(chunk);geminiSecond?.send(chunk);} return;}
-      if ($('engine').value === 'native') return; // Handled by Web Speech API
+      if ($('engine').value === 'native' || $('engine').value === 'free') return; // Handled by Web Speech API
 
       // Intelligent VAD logic
       frames.push(copy);
@@ -722,7 +1130,7 @@ $('start').onclick = async () => {
       }
     };
 
-    if ($('engine').value === 'native') {
+    if ($('engine').value === 'native' || $('engine').value === 'free') {
       startNativeSpeech();
     }
 
@@ -734,8 +1142,8 @@ $('start').onclick = async () => {
 
     $('start').textContent = '■ 停止聆聽';
     for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget']) $(id).disabled = true;
-    $('badge').textContent = gemini ? 'Gemini 串流' : 'OpenAI 模式';
-    status(gemini ? '● Gemini 即時翻譯 · 語言自動偵測' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
+    $('badge').textContent = gemini ? 'Gemini 串流' : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
+    status(gemini ? '● Gemini 即時翻譯 · 語言自動偵測' : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
     try {
       wake = await navigator.wakeLock?.request('screen');
@@ -758,7 +1166,8 @@ $('start').onclick = async () => {
 };
 
 // Manual Text Translation with Streaming
-$('translate').onclick = () => {
+if ($('translate')) {
+  $('translate').onclick = () => {
   const text = $('manual').value.trim();
   if (!text) return;
   if (!openaiConfigured) {
@@ -773,20 +1182,35 @@ $('translate').onclick = () => {
     context: r.context,
     history: getRecentHistory()
   });
-};
+  };
+}
 
 // Demo Subtitles
 function injectDemo() {
-  newRecord({
+  const primary = newRecord({
     demo: true,
     state: 'done',
     text: 'The most important thing is not to stop questioning. Curiosity has its own reason for existing.',
     translation: '最重要的是不要停止提問。好奇心本身，就有其存在的理由。'
   });
-  if($('dualTranslation').checked)$('secondStatus').textContent='○ 第二語言示範字幕（非即時翻譯）';
-  if($('dualTranslation').checked)newRecord({secondary:true,demo:true,state:'done',text:'The most important thing is not to stop questioning. Curiosity has its own reason for existing.',target:$('secondTarget').value,secondTarget:null,translation:({'Japanese':'最も大切なのは、問い続けることです。好奇心そのものに、存在する理由があります。','English':'The most important thing is not to stop questioning. Curiosity has its own reason for existing.','Traditional Chinese (Taiwan)':'最重要的是不要停止提問。好奇心本身，就有其存在的理由。'})[$('secondTarget').value]});
+  if ($('dualTranslation').checked) {
+    newRecord({
+      secondary: true,
+      parentId: primary.id,
+      demo: true,
+      state: 'done',
+      text: primary.text,
+      target: $('secondTarget').value,
+      secondTarget: null,
+      translation: ({
+        'Japanese': '最も大切なのは、問い続けることです。好奇心そのものに、存在する理由があります。',
+        'English': 'The most important thing is not to stop questioning. Curiosity has its own reason for existing.',
+        'Traditional Chinese (Taiwan)': '最重要的是不要停止提問。好奇心本身，就有其存在的理由。'
+      })[$('secondTarget').value] || '最も大切なのは、問い続けることです。'
+    });
+  }
   persist();
-  status('○ 示範字幕 · 雙向對照呈現');
+  status($('dualTranslation').checked ? '○ 示範字幕 · 三欄對照呈現' : '○ 示範字幕 · 雙向對照呈現');
 }
 if ($('demo')) $('demo').onclick = injectDemo;
 
@@ -813,10 +1237,19 @@ $('clear').onclick = () => {
   }
   if (records.length && !confirm('確定清除所有即時字幕？已產生的逐字稿將被刪除。')) return;
   records = [];
+  summarySessionId = crypto.randomUUID();
   elapsed = 0;
   persist();
   draw();
   status('○ 紀錄已清除');
+};
+
+$('newSession').onclick = () => {
+  if (running || starting || records.some(r => r.state === 'streaming' || r.state === 'pending')) {
+    status('請先停止聆聽並等候翻譯完成，再開始新場次。');return;
+  }
+  summarySessionId = crypto.randomUUID();
+  status('○ 已開始新場次；先前字幕仍保留，可匯出逐字稿。');
 };
 
 window.addEventListener('beforeunload', e => {
@@ -838,7 +1271,22 @@ function handleGeminiEvent(event,data,secondary=false) {
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
  if((event!=='input' && event!=='output')||!data.text)return;
  let r=secondary?secondLiveRecord:liveRecord;
- if(!r){r=newRecord({provider:'gemini',state:'streaming',secondary,target:secondary?$('secondTarget').value:$('target').value,secondTarget:null});if(secondary)secondLiveRecord=r;else liveRecord=r;}
+ if(!r){
+   r=newRecord({
+     provider:'gemini',
+     state:'streaming',
+     secondary,
+     parentId: secondary && liveRecord ? liveRecord.id : null,
+     target:secondary?$('secondTarget').value:$('target').value,
+     secondTarget:null
+   });
+   if(secondary){
+     secondLiveRecord=r;
+   } else {
+     liveRecord=r;
+     if(secondLiveRecord && !secondLiveRecord.parentId) secondLiveRecord.parentId=r.id;
+   }
+ }
  if(event==='input')r.text+=data.text;else r.translation+=data.text;
  if(secondary)$('secondStatus').textContent='● 第二語言即時翻譯中';
  updateStreamingRow(r);
@@ -950,8 +1398,9 @@ if ($('pip')) $('pip').onclick = togglePiP;
 
 // --- One-Click AI Lecture Summary ---
 async function generateSummary() {
-  if (!records.length) {
-    status('尚無演講字幕記錄可產出摘要');
+  const selected=selectSummaryRecords(records,summarySessionId);
+  if (!selected.length) {
+    status('當前場次沒有已完成的主語言字幕可摘要');
     return;
   }
   const dialog = $('summaryDialog');
@@ -959,6 +1408,7 @@ async function generateSummary() {
   if (!dialog || !content) return;
 
   dialog.showModal();
+  for(const id of ['copySummary','downloadSummary'])if($(id))$(id).disabled=true;
   content.textContent = '✨ AI 正在深入分析演講逐字稿並提煉核心重點，請稍候…\n\n';
 
   try {
@@ -970,7 +1420,7 @@ async function generateSummary() {
         'Accept': 'text/event-stream'
       },
       body: JSON.stringify({
-        records: records.map(r => ({time: r.time, text: r.text, translation: r.translation})),
+        records: selected.map(({audio,...r})=>r), sessionId: summarySessionId,
         context: $('context')?.value || '',
         target: $('target')?.value || 'Traditional Chinese (Taiwan)'
       })
@@ -984,17 +1434,17 @@ async function generateSummary() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let summaryText='',complete=false;
-    content.textContent='';
     const parser=new SSEParser((event,data)=>{
       if(event==='error')throw Error(data.error||'摘要生成失敗');
-      if(event==='delta')summaryText+=data.delta||'';
-      if(event==='done'){complete=true;if(data.summary!==undefined)summaryText=data.summary;}
+      if(event==='delta')return;
+      if(event==='done' && data.summary?.trim()){complete=true;summaryText=data.summary;}
       content.textContent=summaryText;content.scrollTop=content.scrollHeight;
     });
     while(true){const {done,value}=await reader.read();if(done)break;parser.push(decoder.decode(value,{stream:true}));}
     if(!complete)throw Error('摘要串流提早中斷');
+    for(const id of ['copySummary','downloadSummary'])if($(id))$(id).disabled=false;
   } catch (e) {
-    content.textContent += '\n\n[摘要生成中斷：' + e.message + ']';
+    content.textContent = '[摘要生成中斷：' + e.message + ']';
   }
 }
 
@@ -1085,6 +1535,8 @@ function speakTTS(text, langCode) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = langCode || 'en-US';
     u.rate = 1.0;
+    u.onstart = () => updateAudioReactiveGlow(0.045, 0.12);
+    u.onboundary = () => updateAudioReactiveGlow(0.048, 0.14);
     window.speechSynthesis.speak(u);
   } catch {}
 }
@@ -1138,13 +1590,35 @@ function drawConvFeed() {
   feed.scrollTop = feed.scrollHeight;
 }
 
-async function translateConvRecord(record, text, targetLangStr, ttsLangCode) {
+async function translateConvRecord(record, text, targetLangStr, ttsLangCode, sourceLangCode) {
   record.text = text;
   record.ttsLangCode = ttsLangCode;
   record.translation = '';
   record.state = 'streaming';
   const epoch=convEpoch;
   drawConvFeed();
+
+  const isFree = $('convEngine')?.value === 'free';
+  if (isFree) {
+    try {
+      const translation = await translateFree(text, sourceLangCode || 'auto', targetLangStr);
+      if (epoch !== convEpoch) return;
+      record.translation = translation;
+      record.state = 'done';
+      drawConvFeed();
+
+      // Auto TTS
+      if (epoch === convEpoch && !convActiveSpeaker && $('convAutoTTS')?.checked && record.translation) {
+        speakTTS(record.translation, ttsLangCode);
+      }
+    } catch (err) {
+      if (epoch !== convEpoch) return;
+      record.state = 'error';
+      record.translation = `[免費翻譯異常: ${err.message}]`;
+      drawConvFeed();
+    }
+    return;
+  }
 
   try {
     const res = await fetch('/api/translate-stream', {
@@ -1195,13 +1669,20 @@ function sendManualConv(speaker) {
   const input = $('convTextInput');
   const text = input?.value.trim();
   if (!text) return;
-  if(!configured){$('dialog').showModal();convStatus('請先設定自己的 API 金鑰');return;}
+  const isFree = $('convEngine')?.value === 'free';
+  if (!isFree && !configured) {
+    $('dialog').showModal();
+    convStatus('請先設定自己的 API 金鑰，或切換為「免金鑰即時翻譯」');
+    return;
+  }
   input.value = '';
 
   const isA = speaker === 'A';
   const targetOpt = isA ? $('convLangB').selectedOptions[0] : $('convLangA').selectedOptions[0];
+  const sourceOpt = isA ? $('convLangA').selectedOptions[0] : $('convLangB').selectedOptions[0];
   const targetStr = targetOpt.dataset.target || targetOpt.text;
   const ttsCode = targetOpt.value;
+  const sourceCode = sourceOpt.value;
 
   const rec = {
     id: crypto.randomUUID(),
@@ -1212,7 +1693,7 @@ function sendManualConv(speaker) {
     state: 'pending'
   };
   convRecords.push(rec);
-  translateConvRecord(rec, text, targetStr, ttsCode);
+  translateConvRecord(rec, text, targetStr, ttsCode, sourceCode);
 }
 
 if ($('convSendA')) $('convSendA').onclick = () => sendManualConv('A');
@@ -1235,7 +1716,12 @@ function toggleTalk(speaker) {
 }
 
 function startConvSpeech(speaker) {
-  if(!configured){$('dialog').showModal();convStatus('請先設定自己的 API 金鑰');return;}
+  const isFree = $('convEngine')?.value === 'free';
+  if (!isFree && !configured) {
+    $('dialog').showModal();
+    convStatus('請先設定自己的 API 金鑰，或切換為「免金鑰即時翻譯」');
+    return;
+  }
   if($('convLangA').value===$('convLangB').value){convStatus('請選擇不同的雙方語言');return;}
   window.speechSynthesis?.cancel();
   const epoch=++convEpoch;
@@ -1254,7 +1740,7 @@ function startConvSpeech(speaker) {
     const titleEl = btn.querySelector('.talk-title');
     if (titleEl) titleEl.textContent = '■ 正在收音 (點擊結束)';
   }
-  convStatus(`● 正在聆聽${isA ? '我方' : '對方'}說話…`);
+  convStatus(`● 正在聆聽${isA ? '我方' : '對方'}說話${isFree ? '（免金鑰模式）' : ''}…`);
 
   if (SpeechRec) {
     convRecognizer = new SpeechRec();
@@ -1276,6 +1762,7 @@ function startConvSpeech(speaker) {
       }
 
       if (!currentRec) {
+        updateAudioReactiveGlow(0.045, 0.12);
         currentRec = {
           id: crypto.randomUUID(),
           speaker,
@@ -1287,6 +1774,7 @@ function startConvSpeech(speaker) {
         };
         convRecords.push(currentRec);
       } else {
+        updateAudioReactiveGlow(0.04, 0.11);
         currentRec.interim = interim;
       }
       drawConvFeed();
@@ -1297,7 +1785,7 @@ function startConvSpeech(speaker) {
         const toTranslate = currentRec;
         currentRec = null;
         stopConvSpeech();
-        translateConvRecord(toTranslate, toTranslate.text, targetStr, ttsCode);
+        translateConvRecord(toTranslate, toTranslate.text, targetStr, ttsCode, langCode);
       }
     };
 
@@ -1369,3 +1857,76 @@ if ($('convExport')) {
 
 
 window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?.cancel();});
+
+// Firefighting, Rescue & EMS Glossary Management
+const DEFAULT_FIRE_EMS_GLOSSARY = `【消防·救護·急診醫療中英日專業術語庫】
+[初階評估 ABCDE & 生命徵象]
+- 意識狀態: Level of consciousness (LOC) / Mental status | 意識レベル
+- 呼吸道(Airway): Airway / Patent airway | 気道・気道確保
+- 呼吸(Breathing): Breathing / Respiration | 呼吸・呼吸状態
+- 循環(Circulation): Circulation / Pulse | 循環・脈拍
+- 失能評估(Disability): Disability / Neurological status | 神経学的異常・意識障害
+- 暴露與體溫(Exposure): Exposure & environmental control | 全身観察・体温管理
+- 生命徵象: Vital signs | バイタルサイン
+- 昏迷指數: GCS (Glasgow Coma Scale) | グラスゴー・コーマ・スケール
+- 意識評估: AVPU (Alert, Verbal, Pain, Unresponsive) | AVPU評価
+- 血氧飽和度: SpO2 (Oxygen saturation) | 経皮的動脈血酸素飽和度
+
+[外傷搶救與出血控制 Trauma & Hemorrhage]
+- 止血: Bleeding control / Hemostasis | 止血・止血処置
+- 直接加壓止血: Direct pressure / Pressure dressing | 直接圧迫止血・圧迫包帯
+- 填塞止血: Wound packing / Hemostatic packing | パッキング止血・創傷パッキング
+- 止血帶: CAT Tourniquet | 止血帶・ターニケット
+- 骨折/開放性骨折: Bone fracture / Open fracture | 骨折・開放骨折
+- 頸圈/長背板: Cervical collar (C-collar) / Long spine board | 頸椎カラー・バックボード
+- 骨盆固定帶: Pelvic binder | 骨盤バインダー
+
+[救護現場問診 EMS Dialogue]
+- 你哪裡不舒服？/哪裡痛？: Where does it hurt? / Where are you feeling discomfort? | どこが痛いですか？ / どこか苦しいですか？
+- 請深呼吸: Take a deep breath with me | 深呼吸してください
+- 有藥物過敏嗎？: Any drug allergies? | お薬のアレルギーはありますか？
+- 有何病史？: What medical history do you have? | 既往歴はありますか？
+
+[心肺急症與復甦 Resuscitation]
+- OHCA (到院前心肺停止): Out-of-Hospital Cardiac Arrest | 心肺停止 (CPA/OHCA)
+- ROSC (自主循環恢復): Return of Spontaneous Circulation | 自己心拍再開
+- CPR/壓胸: CPR / Chest compressions | 心肺蘇生法・胸骨圧迫
+- AED (去顫電擊器): Automated External Defibrillator | 自動体外式除細動器 (AED)
+- 甦醒球(BVM): Bag-Valve-Mask | バッグバルブマスク
+- 聲門上呼吸道: SGA / LMA (Laryngeal mask) | 声門上エアウェイ
+- 氣管插管: Endotracheal intubation (ETT) | 気管挿管・気管チューブ
+- 骨針(IO)/腎上腺素: IO (Intraosseous) / Epinephrine | 骨髄針・アドレナリン
+- 心肌梗塞/過敏性休克: AMI (Myocardial infarction) / Anaphylactic shock | 心筋梗塞・アナフィラキシー
+
+[消防滅火與搶救 Fire & Rescue]
+- 消防衣/防護裝備: Turnout gear / Bunker gear | 防火衣
+- 空氣呼吸器(SCBA): SCBA (Breathing apparatus) | 空気呼吸器
+- 瞄子/水帶: Fire nozzle / Fire hose | 筒先・消防ホース
+- 分歧管/泵浦車: Wye / Pumper (fire engine) | 分岐管・消防ポンプ車
+- 雲梯車/破壞器材: Aerial ladder truck / Forcible entry tools (Halligan) | はしご車・破壊器具
+- 熱顯像儀(TIC): Thermal Imaging Camera (TIC) | 熱画像直視装置
+- 火場/入室搜索: Fire scene / Interior search | 火災現場・屋内進入検索
+- 閃燃/爆燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
+- 局限空間/繩索救援: Confined space / Technical rope rescue | 閉鎖空間救助・ロープ救助
+
+[人員體系與大量傷患 EMS & Triage]
+- 救護技術員(EMT): Emergency Medical Technician | 救急隊員
+- 高級救護技術員(專救): Paramedic (EMT-P) | 救急救命士
+- 救護車/派遣中心: Ambulance / 911 dispatch | 救急車・指令センター
+- 大量傷病患(MCI): Mass Casualty Incident | 多数傷病者事故
+- 檢傷分類: Triage (START triage) | トリアージ (赤・黄・緑・黑)
+- 後送醫院/創傷中心: Receiving hospital / Trauma center | 搬送先病院・トラウマセンター`;
+
+if ($('btnResetGlossary')) {
+  $('btnResetGlossary').onclick = () => {
+    if ($('context')) $('context').value = DEFAULT_FIRE_EMS_GLOSSARY;
+  };
+}
+if ($('btnClearGlossary')) {
+  $('btnClearGlossary').onclick = () => {
+    if ($('context')) $('context').value = '';
+  };
+}
+if ($('context') && !$('context').value.trim()) {
+  $('context').value = DEFAULT_FIRE_EMS_GLOSSARY;
+}

@@ -5,7 +5,7 @@ import {SSEParser} from './public/gemini-client.js';
 
 test('hosted visitors have isolated in-memory keys and never return key values',async()=>{
  const requests=[];
- const a=createBrowserAPI({fetcher:async(url,options)=>{requests.push({url,options});return new Response('data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}\n\n');}});
+ const a=createBrowserAPI({fetcher:async(url,options)=>{requests.push({url,options});return new Response('data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]},"finishReason":"STOP"}]}\n\n');}});
  const b=createBrowserAPI();
  const configure=await a('/api/config',{body:JSON.stringify({geminiKey:'visitor-key'})}).then(r=>r.json());
  assert.equal(configure.geminiConfigured,true);assert.doesNotMatch(JSON.stringify(configure),/visitor-key/);
