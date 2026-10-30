@@ -4,51 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>tranRU · 演講即時翻譯</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <nav class="topbar" aria-label="主要導覽">
-    <a class="brand" href="/">▥ <span>tranRU</span></a>
+    <a class="brand" href="./">▥ <span>tranRU</span></a>
     <button class="nav active" id="navLecture">◉ 演講口譯</button>
     <button class="nav" id="navConversation">⇄ 雙向對話</button>
     <div class="topbar-actions">
+      <button id="btnVoiceGlow" class="voice-glow-btn active" title="演講過程隨聲調輕微光影波動">✨ 聲波光影 ON</button>
+      <button id="pip" title="開啟置頂懸浮視窗，可覆蓋在 Zoom 或簡報上方">🪟 懸浮字幕</button>
+      <button id="focus" title="切換演講者模式（全螢幕沉浸專注顯示）">⛶ 演講模式</button>
       <button id="settings">⚙ 服務設定</button>
-      <button id="fullscreen">⛶ 全螢幕</button>
     </div>
   </nav>
-  <button id="exitCompact" class="exit-compact" hidden>退出專注顯示 · Esc</button>
+  <button id="exitCompact" class="exit-compact" hidden>退出演講模式 · Esc</button>
 
   <main>
     <div id="lectureView">
-      <header>
-      <div>
+      <header class="lecture-hero">
         <div class="eyebrow">LIVE SIMULTANEOUS INTERPRETATION</div>
-        <h1>專心聽，讓語言退到背景。</h1>
-        <p>演講、國際論壇、線上課程與每一個值得即時理解的精彩觀點。</p>
-      </div>
-      <div class="header-actions">
-        <button id="pip" title="開啟置頂懸浮視窗，可覆蓋在 Zoom 或簡報上方">🪟 懸浮字幕</button>
-        <button id="focus">⛶ 演講模式</button>
-      </div>
-    </header>
+        <h1>tranRU</h1>
+      </header>
 
-    <section class="controls">
-      <label>音訊來源
+    <section class="controls" id="lectureControls">
+      <label class="ctrl-source">音訊來源
         <select id="source">
           <option value="mic">◉ 現場麥克風</option>
           <option value="tab">▣ 分頁／電腦音訊</option>
         </select>
       </label>
 
-      <label>辨識引擎
+      <label class="ctrl-engine">辨識引擎
         <select id="engine">
-          <option value="gemini">Gemini 即時翻譯（推薦）</option>
+          <option value="gemini">✨ Gemini 即時翻譯（推薦）</option>
           <option value="vad">⚡ 智慧停頓切段 (OpenAI)</option>
           <option value="native">🚀 極速即時模式 (原生語音)</option>
+          <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
         </select>
       </label>
 
-      <label>演講語言
+      <label class="ctrl-lang">演講語言
         <select id="language">
           <option value="en">English · 英文</option>
           <option value="ja">日本語 · 日文</option>
@@ -63,7 +59,7 @@
 
       <span class="arrow">→</span>
 
-      <label>翻譯為
+      <label class="ctrl-target">翻譯為
         <select id="target">
           <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
           <option value="English">English</option>
@@ -71,15 +67,21 @@
         </select>
       </label>
 
-      <button class="primary" id="start">● 開始聆聽</button>
-    </section>
-
-    <section class="dual-options" aria-label="第二語言設定">
-      <label class="inline"><input type="checkbox" id="dualTranslation">同時翻譯成兩種語言</label>
-      <label id="secondTargetLabel" hidden>第二種目標語言
-        <select id="secondTarget"><option value="English">English</option><option value="Japanese" selected>日本語</option><option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option></select>
+      <label class="ctrl-dual inline" title="勾選啟用雙語言同時口譯">
+        <input type="checkbox" id="dualTranslation">
+        <span>雙語言翻譯</span>
       </label>
-      <small id="dualHint" hidden>會增加翻譯用量；Gemini 會同時使用兩個語音翻譯工作階段。請在開始前設定。</small>
+
+      <label class="ctrl-second-target" id="secondTargetLabel" hidden>第二語言
+        <select id="secondTarget">
+          <option value="English">English</option>
+          <option value="Japanese" selected>日本語</option>
+          <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
+        </select>
+      </label>
+
+      <button class="primary" id="start">● 開始聆聽</button>
+      <button id="newSession" title="保留已有字幕，讓後續字幕屬於新場次">＋ 新場次</button>
     </section>
 
     <div class="statusbar">
@@ -98,46 +100,94 @@
       </div>
     </div>
 
-    <section class="transcript">
-      <div class="panel-head">
-        <span>演講原文 <small>ORIGINAL SPEECH</small></span>
-        <span>即時口譯 <small>SIMULTANEOUS TRANSLATION</small></span>
-      </div>
-      <div id="rows">
-        <div class="empty">
-          <div class="sound">▂ ▅ ▃ ▇ ▅ ▂ ▄</div>
-          <h2>把注意力，留給演講。</h2>
-          <p>
-            選擇 Gemini 連續翻譯，或使用 OpenAI 備用。<br>
-            原文與繁體中文字幕將在這裡呈現。
-          </p>
-          <button id="demo">先看看字幕示範 ↗</button>
+    <div class="lecture-actions">
+      <label><input type="checkbox" id="autoscroll" checked> 自動捲動</label>
+      <button id="summaryBtn">✨ 產生本場摘要</button>
+      <button id="export">↓ 匯出逐字稿</button>
+      <button id="clear">清除字幕</button>
+      <span id="secondStatus" role="status"></span>
+    </div>
+    <div class="transcript-portal-wrap">
+      <div id="ambientGlowPortal" class="ambient-glow-portal" aria-hidden="true"></div>
+      <section class="transcript">
+        <div class="panel-head" id="panelHead">
+          <span id="colHeadSpeaker">講者原文 <small>ORIGINAL SPEECH</small></span>
+          <span id="colHeadTarget1">即時口譯 <small id="headTarget1">SIMULTANEOUS TRANSLATION</small></span>
+          <span id="colHeadTarget2" hidden>第二語言 <small id="headTarget2">SECOND TARGET</small></span>
         </div>
-      </div>
+        <div id="rows">
+          <div class="empty">
+            <div class="sound">▂ ▅ ▃ ▇ ▅ ▂ ▄</div>
+            <h2>把注意力，留給演講。</h2>
+            <p>
+              選擇 Gemini 連續翻譯，或使用免金鑰/OpenAI 模式。<br>
+              原文與翻譯字幕將在這裡呈現。
+            </p>
+            <button id="demo">先看看字幕示範 ↗</button>
+          </div>
+        </div>
+         <!-- 專業詞彙與領域知識庫 (後端自動載入，介面不顯示) -->
+    <div style="display:none!important;" hidden>
+      <textarea id="context">【消防·救護·急診醫療中英日專業術語庫】
+[初階評估 ABCDE & 生命徵象]
+- 意識狀態: Level of consciousness (LOC) / Mental status | 意識レベル
+- 呼吸道(Airway): Airway / Patent airway | 気道・気道確保
+- 呼吸(Breathing): Breathing / Respiration | 呼吸・呼吸状態
+- 循環(Circulation): Circulation / Pulse | 循環・脈拍
+- 失能評估(Disability): Disability / Neurological status | 神経学的異常・意識障害
+- 暴露與體溫(Exposure): Exposure & environmental control | 全身観察・体温管理
+- 生命徵象: Vital signs | バイタルサイン
+- 昏迷指數: GCS (Glasgow Coma Scale) | グラスゴー・コーマ・スケール
+- 意識評估: AVPU (Alert, Verbal, Pain, Unresponsive) | AVPU評価
+- 血氧飽和度: SpO2 (Oxygen saturation) | 経皮的動脈血酸素飽和度
+
+[外傷搶救與出血控制 Trauma & Hemorrhage]
+- 止血: Bleeding control / Hemostasis | 止血・止血処置
+- 直接加壓止血: Direct pressure / Pressure dressing | 直接圧迫止血・圧迫包帯
+- 填塞止血: Wound packing / Hemostatic packing | パッキング止血・創傷パッキング
+- 止血帶: CAT Tourniquet | 止血帶・ターニケット
+- 骨折/開放性骨折: Bone fracture / Open fracture | 骨折・開放骨折
+- 頸圈/長背板: Cervical collar (C-collar) / Long spine board | 頸椎カラー・バックボード
+- 骨盆固定帶: Pelvic binder | 骨盤バインダー
+
+[救護現場問診 EMS Dialogue]
+- 你哪裡不舒服？/哪裡痛？: Where does it hurt? / Where are you feeling discomfort? | どこが痛いですか？ / どこか苦しいですか？
+- 請深呼吸: Take a deep breath with me | 深呼吸してください
+- 有藥物過敏嗎？: Any drug allergies? | お薬のアレルギーはありますか？
+- 有何病史？: What medical history do you have? | 既往歴はありますか？
+
+[心肺急症與復甦 Resuscitation]
+- OHCA (到院前心肺停止): Out-of-Hospital Cardiac Arrest | 心肺停止 (CPA/OHCA)
+- ROSC (自主循環恢復): Return of Spontaneous Circulation | 自己心拍再開
+- CPR/壓胸: CPR / Chest compressions | 心肺蘇生法・胸骨圧迫
+- AED (去顫電擊器): Automated External Defibrillator | 自動体外式除細動器 (AED)
+- 甦醒球(BVM): Bag-Valve-Mask | バッグバルブマスク
+- 聲門上呼吸道: SGA / LMA (Laryngeal mask) | 声門上エアウェイ
+- 氣管插管: Endotracheal intubation (ETT) | 気管挿管・気管チューブ
+- 骨針(IO)/腎上腺素: IO (Intraosseous) / Epinephrine | 骨髄針・アドレナリン
+- 心肌梗塞/過敏性休克: AMI (Myocardial infarction) / Anaphylactic shock | 心筋梗塞・アナフィラキシー
+
+[消防滅火與搶救 Fire & Rescue]
+- 消防衣/防護裝備: Turnout gear / Bunker gear | 防火衣
+- 空氣呼吸器(SCBA): SCBA (Breathing apparatus) | 空気呼吸器
+- 瞄子/水帶: Fire nozzle / Fire hose | 筒先・消防ホース
+- 分歧管/泵浦車: Wye / Pumper (fire engine) | 分岐管・消防ポンプ車
+- 雲梯車/破壞器材: Aerial ladder truck / Forcible entry tools (Halligan) | はしご車・破壊器具
+- 熱顯像儀(TIC): Thermal Imaging Camera (TIC) | 熱画像直視装置
+- 火場/入室搜索: Fire scene / Interior search | 火災現場・屋内進入検索
+- 閃燃/爆燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
+- 局限空間/繩索救援: Confined space / Technical rope rescue | 閉鎖空間救助・ロープ救助
+
+[人員體系與大量傷患 EMS & Triage]
+- 救護技術員(EMT): Emergency Medical Technician | 救急隊員
+- 高級救護技術員(專救): Paramedic (EMT-P) | 救急救命士
+- 救護車/派遣中心: Ambulance / 911 dispatch | 救急車・指令センター
+- 大量傷病患(MCI): Mass Casualty Incident | 多数傷病者事故
+- 檢傷分類: Triage (START triage) | トリアージ (赤・黄・緑・黒)
+- 後送醫院/創傷中心: Receiving hospital / Trauma center | 搬送先病院・トラウマセンター</textarea>
+    </div>
     </section>
-
-    <section id="secondPanel" class="transcript second-panel" hidden>
-      <div class="panel-head"><span>演講原文 <small>ORIGINAL SPEECH</small></span><span id="secondTitle">第二語言譯文</span></div>
-      <p id="secondStatus" role="status" aria-live="polite">等待第二語言字幕</p>
-      <div id="secondRows"></div>
-    </section>
-
-    <footer>
-      <div>
-        <label class="inline">字幕大小 <input id="font" type="range" min="18" max="44" value="24"></label>
-        <label class="inline"><input id="autoscroll" type="checkbox" checked>自動捲動</label>
-      </div>
-      <div>
-        <button id="summaryBtn" class="accent-btn" title="由 AI 自動提煉本次演講核心重點">✨ AI 演講摘要</button>
-        <button id="export">↓ 匯出逐字稿</button>
-        <button id="clear">清除紀錄</button>
-      </div>
-    </footer>
-
-    <details>
-      <summary>專業詞彙與演講背景（僅 OpenAI 模式使用）</summary>
-      <textarea id="context" placeholder="例如：AI 研討會；LLM＝大型語言模型，inference＝推論，Transformer＝轉換器架構，fine-tuning＝微調。OpenAI 翻譯時參考此對照表；Gemini Live Translate 不支援自訂提示。"></textarea>
-    </details>
+    </div>
 
     <details>
       <summary>文字手動翻譯／連線測試</summary>
@@ -149,7 +199,7 @@
       Gemini 模式會將音訊連續傳送至 Google；OpenAI 模式會傳送至 OpenAI，兩者依 API 額度計費。
       Gemini 為預覽服務，自動偵測原語言，僅顯示字幕、不播放譯音（服務仍可能計算音訊輸出費用）。
       自動備用啟用後，Gemini 中斷將改由 OpenAI 處理後續收音；切換期間的未完成字幕可能缺漏。
-      線上演講請選取分頁並勾選「分享分頁音訊」。
+      線上演講請選取分頁並勾選「分享分頁音訊」。免金鑰模式使用瀏覽器語音辨識，翻譯可能將辨識文字傳送至 Google；僅支援麥克風與指定演講語言。
     </p>
     </div> <!-- end #lectureView -->
 
@@ -189,6 +239,13 @@
             <option value="zh-TW" data-target="Traditional Chinese (Taiwan)">繁體中文</option>
           </select>
         </label>
+
+        <label>翻譯方式
+          <select id="convEngine">
+            <option value="free" selected>🌐 免金鑰即時翻譯 (無需 API · 免費即用)</option>
+            <option value="ai">🤖 AI 大模型串流 (Gemini / OpenAI)</option>
+          </select>
+        </label>
       </section>
 
       <div class="statusbar conv-statusbar">
@@ -196,15 +253,18 @@
         <span id="convCount">0 則對話</span>
       </div>
 
-      <section class="conv-feed-wrapper">
-        <div id="convFeed" class="conv-feed">
-          <div class="conv-empty">
-            <div class="sound">💬</div>
-            <h2>隨時開始自然雙向對話</h2>
-            <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+      <div class="transcript-portal-wrap">
+        <div id="convGlowPortal" class="ambient-glow-portal" aria-hidden="true"></div>
+        <section class="conv-feed-wrapper">
+          <div id="convFeed" class="conv-feed">
+            <div class="conv-empty">
+              <div class="sound">💬</div>
+              <h2>隨時開始自然雙向對話</h2>
+              <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <div class="conv-input-panel">
         <div class="conv-actions">
@@ -266,9 +326,9 @@
 
     <label>串流翻譯服務商 (LLM Provider)
       <select id="translationProvider">
-        <option value="auto">自動選擇（有 Gemini 金鑰優先使用 Gemini Flash）</option>
-        <option value="gemini">Google Gemini (Gemini Flash · 首字極速)</option>
-        <option value="openai">OpenAI (GPT-4o-mini)</option>
+        <option value="auto">✨ 自動選擇（有 Gemini 金鑰優先使用 Gemini Flash）</option>
+        <option value="gemini">✨ Google Gemini (Gemini Flash · 首字極速)</option>
+        <option value="openai">⚡ OpenAI (GPT-4o-mini)</option>
       </select>
     </label>
 
@@ -292,6 +352,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

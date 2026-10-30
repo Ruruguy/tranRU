@@ -68,6 +68,7 @@ test('server integration & SSE contract test', async (t) => {
   assert.equal(page.status, 200);
   const html = await page.text();
   assert.match(html, /tranRU/);
+  assert.equal((await fetch(base + '/summary-core.js')).status, 200);
 
   // 3. CSRF token protection
   const forbidden = await fetch(base + '/api/translate-stream', {

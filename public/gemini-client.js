@@ -1,7 +1,7 @@
 import {apiFetch} from './api-client.js';
 export class SSEParser {
  constructor(onEvent){this.buffer='';this.onEvent=onEvent;}
- push(text){this.buffer+=text.replace(/\r\n/g,'\n');let p;while((p=this.buffer.indexOf('\n\n'))>=0){const block=this.buffer.slice(0,p);this.buffer=this.buffer.slice(p+2);let event='message';const data=[];for(const line of block.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trimStart());}if(data.length)this.onEvent(event,JSON.parse(data.join('\n')));}}
+ push(text){this.buffer=(this.buffer+text).replace(/\r\n/g,'\n');let p;while((p=this.buffer.indexOf('\n\n'))>=0){const block=this.buffer.slice(0,p);this.buffer=this.buffer.slice(p+2);let event='message';const data=[];for(const line of block.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trimStart());}if(data.length)this.onEvent(event,JSON.parse(data.join('\n')));}}
 }
 export class PCMChunks {
  constructor(rate){this.ratio=rate/16000;this.weight=0;this.sum=0;this.samples=[];}
