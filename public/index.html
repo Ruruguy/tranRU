@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+  <div id="fileWarning" hidden style="padding:12px;background:#8b1616;color:white">請透過 <a href="http://127.0.0.1:8787/" style="color:white">本機網站</a> 或線上網址開啟，直接開啟檔案無法啟動翻譯。</div>
+  <script>if(location.protocol === "file:") document.getElementById("fileWarning").hidden = false;</script>
   <nav class="topbar" aria-label="主要導覽">
     <a class="brand" href="./">▥ <span>tranRU</span></a>
     <button class="nav active" id="navLecture">◉ 演講口譯</button>
@@ -49,7 +51,7 @@
           <option value="en">English · 英文</option>
           <option value="ja">日本語 · 日文</option>
           <option value="ko">한국어 · 韓文</option>
-          <option value="zh">中文 · 華語</option>
+          <option value="zh">中文 · 繁體中文（台灣）</option>
           <option value="auto">自動偵測</option>
           <option value="es">Español · 西班牙文</option>
           <option value="fr">Français · 法文</option>
@@ -83,6 +85,15 @@
         </select>
       </label>
 
+      <label class="ctrl-dual inline" id="tripleLabel" hidden><input type="checkbox" id="tripleTranslation">三語言翻譯</label>
+      <label class="ctrl-second-target" id="thirdTargetLabel" hidden>第三語言
+        <select id="thirdTarget">
+          <option value="English" selected>English</option>
+          <option value="Japanese">日本語</option>
+          <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
+          <option value="Bengali">বাংলা · 孟加拉語</option>
+        </select>
+      </label>
       <button class="primary" id="start">● 開始聆聽</button>
       <button id="newSession" title="保留已有字幕，讓後續字幕屬於新場次">＋ 新場次</button>
     </section>
@@ -117,6 +128,7 @@
           <span id="colHeadSpeaker">講者原文 <small>ORIGINAL SPEECH</small></span>
           <span id="colHeadTarget1">即時口譯 <small id="headTarget1">SIMULTANEOUS TRANSLATION</small></span>
           <span id="colHeadTarget2" hidden>第二語言 <small id="headTarget2">SECOND TARGET</small></span>
+          <span id="colHeadTarget3" hidden>第三語言</span>
         </div>
         <div id="rows">
           <div class="empty">

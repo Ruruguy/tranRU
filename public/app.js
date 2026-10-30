@@ -10,6 +10,8 @@ let openaiBlocked = false;
 let openaiConfigured = false, geminiConfigured = false;
 let gemini = null, pcm = null, liveRecord = null;
 let geminiSecond = null, secondLiveRecord = null;
+let geminiThird = null, thirdLiveRecord = null;
+let liveBatch = '', liveTurnCounts = [0, 0, 0];
 const canStart = () => $('engine').value === 'free' ? true : $('engine').value === 'gemini' ? geminiConfigured : (openaiConfigured || geminiConfigured);
 function updateKeys(s) {
  openaiConfigured = s.openaiConfigured ?? s.configured; geminiConfigured = !!s.geminiConfigured; configured = openaiConfigured || geminiConfigured;
@@ -116,6 +118,13 @@ $('checkGemini').onclick = async () => {
 function syncDualUI() {
   const enabled = $('dualTranslation') ? $('dualTranslation').checked : false;
   if ($('secondTargetLabel')) $('secondTargetLabel').hidden = !enabled;
+  $('tripleLabel').hidden = !enabled;
+  if (!enabled) $('tripleTranslation').checked = false;
+  const triple = enabled && $('tripleTranslation').checked;
+  $('thirdTargetLabel').hidden = !triple;
+  $('colHeadTarget3').hidden = !triple;
+  $('colHeadTarget3').textContent = '第三語言 · ' + $('thirdTarget').selectedOptions[0].textContent;
+  $('panelHead').classList.toggle('triple-layout', triple);
   if ($('dualHint')) $('dualHint').hidden = !enabled;
   if ($('secondPanel')) $('secondPanel').hidden = true;
 
@@ -143,6 +152,8 @@ function syncDualUI() {
 if ($('dualTranslation')) $('dualTranslation').onchange = syncDualUI;
 if ($('secondTarget')) $('secondTarget').onchange = syncDualUI;
 if ($('target')) $('target').addEventListener('change', syncDualUI);
+$('tripleTranslation').onchange = syncDualUI;
+$('thirdTarget').onchange = syncDualUI;
 syncDualUI();
 
 // UI Controls
@@ -341,6 +352,7 @@ function draw() {
   if ($('secondPanel')) $('secondPanel').hidden = true;
 
   const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
+  const isTriple = isDual && $('tripleTranslation').checked;
 
   if (!records.length) {
     const empty = document.createElement('div');
@@ -361,12 +373,12 @@ function draw() {
 
   for (const r of primaryRecords) {
     const sec = isDual
-      ? records.find(s => s.secondary && (s.parentId === r.id || (!s.parentId && s.id === r.secondId) || (!s.parentId && s.time === r.time && s.sessionId === r.sessionId)))
+      ? records.find(s => s.secondary && s.languageSlot !== 3 && (s.parentId === r.id || (!s.parentId && s.id === r.secondId) || (!s.parentId && s.time === r.time && s.sessionId === r.sessionId)))
       : null;
 
     const row = document.createElement('div');
     const isStreaming = r.state === 'streaming' || r.state === 'pending' || (sec && (sec.state === 'streaming' || sec.state === 'pending'));
-    row.className = (isDual ? 'row row-dual-3col' : 'row') + (isStreaming ? ' live-active' : '');
+    row.className = (isTriple ? 'row triple-layout' : isDual ? 'row row-dual-3col' : 'row') + (isStreaming ? ' live-active' : '');
     row.id = 'row-' + r.id;
 
     // 1st Column: 講者原文
@@ -442,6 +454,12 @@ function draw() {
       row.append(cellC);
     }
 
+    if (isTriple) {
+      const third = records.find(s => s.secondary && s.languageSlot === 3 && s.parentId === r.id);
+      const cell = document.createElement('div'); cell.className = 'cell';
+      cell.textContent = third ? (third.state === 'error' ? (third.error || '第三語言失敗') : (third.translation || '等待第三語言…')) : '等待第三語言…';
+      row.append(cell);
+    }
     el.append(row);
   }
 
@@ -453,6 +471,7 @@ function draw() {
 }
 
 function updateStreamingRow(record) {
+  if (record.languageSlot === 3 || $('tripleTranslation').checked) { draw(); return; }
   let row = null;
   const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
 
@@ -571,6 +590,7 @@ function newRecord(data) {
     language: $('language').value,
     target: $('target').value,
     secondTarget: $('dualTranslation').checked ? $('secondTarget').value : null,
+    thirdTarget: $('dualTranslation').checked && $('tripleTranslation').checked ? $('thirdTarget').value : null,
     context: $('context').value,
     ...data
   };
@@ -676,6 +696,11 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
       record.secondRequested=true;
       const second=newRecord({secondary:true,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.secondTarget,secondTarget:null});
       streamRecord(second,'translate-stream',{text:second.text,target:second.target,context:second.context,history:[]});
+    }
+    if(!record.secondary && record.thirdTarget && record.text.trim() && !record.thirdRequested){
+      record.thirdRequested=true;
+      const third=newRecord({secondary:true,languageSlot:3,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.thirdTarget,secondTarget:null,thirdTarget:null});
+      streamRecord(third,'translate-stream',{text:third.text,target:third.target,context:third.context,history:[]});
     }
     if(!record.text.trim() && !record.translation.trim()){records=records.filter(r=>r!==record);draw();}
     persist();
@@ -939,6 +964,11 @@ async function translateFreeRecord(record) {
       });
       translateFreeRecord(second);
     }
+    if (!record.secondary && record.thirdTarget && record.text.trim() && !record.thirdRequested) {
+      record.thirdRequested = true;
+      const third = newRecord({secondary:true,languageSlot:3,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.thirdTarget,secondTarget:null,thirdTarget:null});
+      translateFreeRecord(third);
+    }
     persist();
   } catch (err) {
     record.state = 'error';
@@ -970,9 +1000,9 @@ async function stop() {
   if (gemini) {
     $('start').disabled = true;
     status('○ 正在完成 Gemini 剩餘字幕…');
-    const tail = pcm?.tail(); if(tail){gemini.send(tail);geminiSecond?.send(tail);}
-    await Promise.allSettled([gemini.end(),geminiSecond?.end()]);
-    geminiSecond=null;finishLiveRecord(false,true);
+    const tail = pcm?.tail(); if(tail){gemini.send(tail);geminiSecond?.send(tail);geminiThird?.send(tail);}
+    await Promise.allSettled([gemini.end(),geminiSecond?.end(),geminiThird?.end()]);
+    geminiSecond=null;finishLiveRecord(false,true);geminiThird=null;finishLiveRecord(false,3);
     gemini = null; pcm = null; finishLiveRecord(false);
     $('start').disabled = false;
   } else if (ctx && totalSamples) flushVAD();
@@ -994,7 +1024,7 @@ async function stop() {
 
   $('meterFill').style.width = '0%';
   $('start').textContent = '● 開始聆聽';
-  for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget']) $(id).disabled = false;
+  for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = false;
   status('○ 已停止聆聽');
   persist();
 }
@@ -1019,11 +1049,14 @@ $('start').onclick = async () => {
   if (['free','native'].includes($('engine').value) && $('language').value === 'auto') {
     status('瀏覽器語音辨識不支援自動偵測，請選擇演講語言。');return;
   }
+  if ($('dualTranslation').checked && $('tripleTranslation').checked && [$('target').value,$('secondTarget').value].includes($('thirdTarget').value)) {status('請選擇三種不同的目標語言');return;}
   starting = true;
-  for(const id of ['source','engine','language','target','dualTranslation','secondTarget'])$(id).disabled=true;
+  for(const id of ['source','engine','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
   $('start').disabled = true;
   openaiBlocked = false;
   const currentSession = ++session;
+  liveBatch = crypto.randomUUID();
+  liveTurnCounts = [0, 0, 0];
   let fallbackReason = "";
 
   try {
@@ -1050,6 +1083,11 @@ $('start').onclick = async () => {
       geminiSecond=new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,true),onFailure:handleSecondFailure});
       try {await geminiSecond.connect($('secondTarget').value);$('secondStatus').textContent='第二語言已連線，等待音訊';}
       catch(e){geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
+    }
+    if (gemini && $('dualTranslation').checked && $('tripleTranslation').checked) {
+      geminiThird = new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,3),onFailure:error=>handleThirdFailure(error)});
+      try { await geminiThird.connect($('thirdTarget').value); }
+      catch(e) { geminiThird?.close();geminiThird=null; $('secondStatus').textContent='第三語言連線失敗：'+e.message; }
     }
     stream = sourceVal === 'tab'
       ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
@@ -1106,7 +1144,7 @@ $('start').onclick = async () => {
       // Audio-reactive ambient light ripples (動態聲波光影波動)
       updateAudioReactiveGlow(rms, zcr);
 
-      if (gemini) {for(const chunk of pcm.push(copy)){gemini?.send(chunk);geminiSecond?.send(chunk);} return;}
+      if (gemini) {for(const chunk of pcm.push(copy)){gemini?.send(chunk);geminiSecond?.send(chunk);geminiThird?.send(chunk);} return;}
       if ($('engine').value === 'native' || $('engine').value === 'free') return; // Handled by Web Speech API
 
       // Intelligent VAD logic
@@ -1142,7 +1180,7 @@ $('start').onclick = async () => {
     }
 
     $('start').textContent = '■ 停止聆聽';
-    for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget']) $(id).disabled = true;
+    for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
     $('badge').textContent = gemini ? 'Gemini 串流' : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
     status(gemini ? '● Gemini 即時翻譯 · 語言自動偵測' : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
@@ -1151,7 +1189,7 @@ $('start').onclick = async () => {
     } catch {}
   } catch (e) {
     gemini?.close(); gemini=null; pcm=null;
-    geminiSecond?.close();geminiSecond=null;
+    geminiSecond?.close();geminiSecond=null;geminiThird?.close();geminiThird=null;
     stream?.getTracks().forEach(t => t.stop());
     if (ctx) await ctx.close().catch(() => {});
     ctx = null;
@@ -1161,7 +1199,7 @@ $('start').onclick = async () => {
     status('無法啟動：' + e.message);
   } finally {
     starting = false;
-    if(!running)for(const id of ['source','engine','language','target','dualTranslation','secondTarget'])$(id).disabled=false;
+    if(!running)for(const id of ['source','engine','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
     $('start').disabled = false;
   }
 };
@@ -1261,36 +1299,46 @@ window.addEventListener('beforeunload', e => {
 });
 
 function finishLiveRecord(interrupted,secondary=false) {
- const r=secondary?secondLiveRecord:liveRecord;
+ const r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
  if(!r)return;
  if(!r.text && !r.translation)records=records.filter(x=>x!==r);
  else {r.state=interrupted || !r.translation?'error':'done';if(r.state==='error')r.error='Gemini 字幕未完成；中斷期間可能缺字。';}
- if(secondary)secondLiveRecord=null;else liveRecord=null;
+ if(secondary===3)thirdLiveRecord=null;else if(secondary)secondLiveRecord=null;else liveRecord=null;
  draw();persist();
 }
 function handleGeminiEvent(event,data,secondary=false) {
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
  if((event!=='input' && event!=='output')||!data.text)return;
- let r=secondary?secondLiveRecord:liveRecord;
+ let r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
  if(!r){
+   const slot=secondary===3?3:secondary?2:1;
+   const turn=liveTurnCounts[slot-1]++;
+   const primary=records.find(item=>!item.secondary && item.liveBatch===liveBatch && item.liveTurn===turn);
    r=newRecord({
      provider:'gemini',
      state:'streaming',
-     secondary,
-     parentId: secondary && liveRecord ? liveRecord.id : null,
-     target:secondary?$('secondTarget').value:$('target').value,
+     secondary:!!secondary,
+     languageSlot:slot, liveBatch, liveTurn:turn,
+     parentId: secondary ? (primary?.id || null) : null,
+     target:secondary===3?$('thirdTarget').value:secondary?$('secondTarget').value:$('target').value,
      secondTarget:null
    });
-   if(secondary){
+   if(secondary===3){
+     thirdLiveRecord=r;
+   } else if(secondary){
      secondLiveRecord=r;
    } else {
      liveRecord=r;
-     if(secondLiveRecord && !secondLiveRecord.parentId) secondLiveRecord.parentId=r.id;
+     for (const item of records) if(item.secondary && item.liveBatch===liveBatch && item.liveTurn===turn && !item.parentId) item.parentId=r.id;
    }
  }
  if(event==='input')r.text+=data.text;else r.translation+=data.text;
  if(secondary)$('secondStatus').textContent='● 第二語言即時翻譯中';
  updateStreamingRow(r);
+}
+function handleThirdFailure(error){
+ geminiThird?.close();geminiThird=null;finishLiveRecord(true,3);
+ $('secondStatus').textContent='第三語言已中斷：'+error.message;
 }
 function handleSecondFailure(error){
  geminiSecond?.close();geminiSecond=null;finishLiveRecord(true,true);
@@ -1299,6 +1347,7 @@ function handleSecondFailure(error){
 function handleGeminiFailure(error) {
  const old=gemini;gemini=null;pcm=null;old?.close();finishLiveRecord(true);
  geminiSecond?.close();geminiSecond=null;finishLiveRecord(true,true);
+ geminiThird?.close();geminiThird=null;finishLiveRecord(true,3);
  if(!running)return;
  if($('fallback').checked && openaiConfigured && !openaiBlocked){
   $('engine').value='vad';frames=[];totalSamples=silenceSamples=0;isSpeaking=false;

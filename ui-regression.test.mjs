@@ -35,3 +35,14 @@ test('Bengali language choices and unsupported Tuvaluan voice guards',async()=>{
  vm.runInNewContext(app.slice(app.indexOf('function startConvSpeech('),app.indexOf('function stopConvSpeech(')),sandbox);
  sandbox.startConvSpeech('A');assert.match(message,/手動文字/);
 });
+test('three live streams link delayed subtitle turns to the matching original',()=>{
+ let id=0;const nodes={target:{value:'Traditional Chinese (Taiwan)'},secondTarget:{value:'Japanese'},thirdTarget:{value:'English'},secondStatus:{}};
+ const sandbox={records:[],liveRecord:null,secondLiveRecord:null,thirdLiveRecord:null,liveBatch:'batch',liveTurnCounts:[0,0,0],$:id=>nodes[id],draw(){},persist(){},updateStreamingRow(){},newRecord(data){const r={id:String(++id),text:'',translation:'',...data};sandbox.records.push(r);return r;}};
+ vm.runInNewContext(app.slice(app.indexOf('function finishLiveRecord('),app.indexOf('function handleThirdFailure(')),sandbox);
+ sandbox.handleGeminiEvent('input',{text:'first'});sandbox.handleGeminiEvent('output',{text:'甲'});sandbox.handleGeminiEvent('turn',{});
+ sandbox.handleGeminiEvent('input',{text:'second'});sandbox.handleGeminiEvent('output',{text:'乙'});
+ sandbox.handleGeminiEvent('output',{text:'first translation'},3);
+ assert.equal(sandbox.records.find(r=>r.languageSlot===3).parentId,sandbox.records.find(r=>r.text==='first').id);
+ sandbox.handleGeminiEvent('turn',{},3);sandbox.handleGeminiEvent('output',{text:'second translation'},3);
+ assert.equal(sandbox.records.filter(r=>r.languageSlot===3)[1].parentId,sandbox.records.find(r=>r.text==='second').id);
+});
