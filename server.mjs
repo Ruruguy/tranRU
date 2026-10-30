@@ -552,7 +552,8 @@ const handle = async (req, res) => {
           'fr-FR': 'fr',
           'German': 'de',
           'de': 'de',
-          'de-DE': 'de'
+          'de-DE': 'de',
+          'Bengali': 'bn', 'bn': 'bn', 'bn-BD': 'bn'
         };
         const tl = langMap[target] || 'zh-TW';
         const sl = langMap[source] || 'auto';

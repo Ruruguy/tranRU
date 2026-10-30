@@ -758,7 +758,8 @@ function startNativeSpeech() {
     zh: 'zh-TW',
     es: 'es-ES',
     fr: 'fr-FR',
-    de: 'de-DE'
+    de: 'de-DE',
+    bn: 'bn-BD'
   };
   speechRecognizer.lang = langMap[$('language').value] || 'en-US';
 
@@ -827,10 +828,10 @@ function startNativeSpeech() {
 function mapToGoogleLang(langStr) {
   if (!langStr) return 'auto';
   const l = String(langStr).trim().toLowerCase();
-  const aliases = {'traditional chinese (taiwan)':'zh-TW','chinese':'zh-TW','中文':'zh-TW','繁體中文':'zh-TW',english:'en',japanese:'ja','日文':'ja',korean:'ko','韓文':'ko',spanish:'es','西班牙文':'es',french:'fr','法文':'fr',german:'de','德文':'de'};
+  const aliases = {'traditional chinese (taiwan)':'zh-TW','chinese':'zh-TW','中文':'zh-TW','繁體中文':'zh-TW',english:'en',japanese:'ja','日文':'ja',korean:'ko','韓文':'ko',spanish:'es','西班牙文':'es',french:'fr','法文':'fr',german:'de','德文':'de',bengali:'bn',bangla:'bn','孟加拉語':'bn'};
   if (aliases[l]) return aliases[l];
   const base = l.split('-')[0];
-  return ({zh:'zh-TW',en:'en',ja:'ja',ko:'ko',es:'es',fr:'fr',de:'de'})[base] || 'auto';
+  return ({zh:'zh-TW',en:'en',ja:'ja',ko:'ko',es:'es',fr:'fr',de:'de',bn:'bn'})[base] || 'auto';
 }
 
 function applyGlossaryToText(text, sourceLang, targetLang) {
@@ -1529,6 +1530,7 @@ function convStatus(t) {
 }
 
 function speakTTS(text, langCode) {
+  if (langCode === 'tvl') { convStatus('吐瓦魯語朗讀尚不支援。'); return; }
   if (!('speechSynthesis' in window) || !text) return;
   try {
     window.speechSynthesis.cancel();
@@ -1574,7 +1576,7 @@ function drawConvFeed() {
       <div class="conv-bubble ${isA ? 'conv-bubble-a' : 'conv-bubble-b'}" id="conv-bubble-${r.id}">
         <div class="conv-bubble-meta">
           <span class="conv-bubble-speaker">${speakerName} · ${r.time}</span>
-          ${r.translation ? `<button class="conv-tts-btn" data-record="${r.id}" title="朗讀譯文">🔊 朗讀</button>` : ''}
+          ${r.translation && r.ttsLangCode !== 'tvl' ? `<button class="conv-tts-btn" data-record="${r.id}" title="朗讀譯文">🔊 朗讀</button>` : ''}
         </div>
         <div class="conv-original">${escapeHtml(r.text || r.interim || '正在辨識語音…')}</div>
         <div class="conv-translation">${escapeHtml(r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''))}</div>
@@ -1670,6 +1672,9 @@ function sendManualConv(speaker) {
   const text = input?.value.trim();
   if (!text) return;
   const isFree = $('convEngine')?.value === 'free';
+  if (isFree && [$('convLangA').value, $('convLangB').value].includes('tvl')) {
+    convStatus('吐瓦魯語請選 AI 大模型，使用手動文字翻譯；結果尚需人工確認。');return;
+  }
   if (!isFree && !configured) {
     $('dialog').showModal();
     convStatus('請先設定自己的 API 金鑰，或切換為「免金鑰即時翻譯」');
@@ -1717,6 +1722,9 @@ function toggleTalk(speaker) {
 
 function startConvSpeech(speaker) {
   const isFree = $('convEngine')?.value === 'free';
+  if ([$('convLangA').value, $('convLangB').value].includes('tvl')) {
+    convStatus('吐瓦魯語目前僅支援 AI 手動文字翻譯，請輸入文字並選擇 AI 大模型。');return;
+  }
   if (!isFree && !configured) {
     $('dialog').showModal();
     convStatus('請先設定自己的 API 金鑰，或切換為「免金鑰即時翻譯」');
