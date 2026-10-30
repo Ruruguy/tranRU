@@ -3,6 +3,7 @@ import {classifyServiceError} from './service-errors.js';
 import {GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
 import {selectSummaryRecords} from './summary-core.js';
 import {toTaiwanTranscript, isTraditionalChineseTarget} from './traditional.js';
+import {findMedicalTerms, medicalContext} from './medical-glossary.js';
 const $ = id => document.getElementById(id);
 
 let token = '';
@@ -424,6 +425,10 @@ function draw() {
     } else {
       cellB.textContent = r.translation || '';
     }
+    if (r.translationBeforeMedical) {
+      const details=document.createElement('details'), summary=document.createElement('summary');
+      summary.textContent='查看校對前即時譯文';details.append(summary,document.createTextNode(r.translationBeforeMedical));cellB.append(details);
+    }
 
     row.append(cellA, cellB);
 
@@ -452,6 +457,7 @@ function draw() {
           cellC.textContent = r.secondTranslation || '';
         }
       }
+      if(sec?.translationBeforeMedical){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看校對前即時譯文';details.append(summary,document.createTextNode(sec.translationBeforeMedical));cellC.append(details);}
       row.append(cellC);
     }
 
@@ -459,6 +465,7 @@ function draw() {
       const third = records.find(s => s.secondary && s.languageSlot === 3 && s.parentId === r.id);
       const cell = document.createElement('div'); cell.className = 'cell';
       cell.textContent = third ? (third.state === 'error' ? (third.error || '第三語言失敗') : (third.translation || '等待第三語言…')) : '等待第三語言…';
+      if(third?.translationBeforeMedical){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看校對前即時譯文';details.append(summary,document.createTextNode(third.translationBeforeMedical));cell.append(details);}
       row.append(cell);
     }
     el.append(row);
@@ -472,6 +479,10 @@ function draw() {
 }
 
 function updateStreamingRow(record) {
+  if (!record.secondary && record.text && $('medicalTerms')) {
+    const terms=findMedicalTerms(record.text, 8);
+    $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
+  }
   if (record.languageSlot === 3 || $('tripleTranslation').checked) { draw(); return; }
   let row = null;
   const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
@@ -1314,6 +1325,39 @@ function finishLiveRecord(interrupted,secondary=false) {
  else {r.state=interrupted || !r.translation?'error':'done';if(r.state==='error')r.error='Gemini 字幕未完成；中斷期間可能缺字。';}
  if(secondary===3)thirdLiveRecord=null;else if(secondary)secondLiveRecord=null;else liveRecord=null;
  draw();persist();
+ if(r.state==='done' && $('medicalRefine')?.checked && r.text && findMedicalTerms(r.text,1).length) enqueueMedicalRefinement(r);
+}
+
+const medicalRefinementQueue=[];
+let medicalRefinementsActive=0;
+function enqueueMedicalRefinement(record) {
+ if(medicalRefinementQueue.length>=20){$('medicalRefineStatus').textContent='術語校對已達等待上限；此段保留原即時譯文。';return;}
+ medicalRefinementQueue.push(record); drainMedicalRefinements();
+}
+function drainMedicalRefinements() {
+ if (!$('medicalRefine')?.checked) {medicalRefinementQueue.length=0;return;}
+ while(medicalRefinementsActive<2 && medicalRefinementQueue.length){
+  const record=medicalRefinementQueue.shift();
+  if(!records.includes(record))continue;
+  medicalRefinementsActive++;
+  $('medicalRefineStatus').textContent='相關術語校對中，先顯示原即時譯文…';
+  refineMedicalTurn(record).catch(error=>{ $('medicalRefineStatus').textContent='術語校對未完成，保留原即時譯文：'+classifyServiceError(error.message).message; })
+   .finally(()=>{medicalRefinementsActive--;drainMedicalRefinements();});
+ }
+}
+async function refineMedicalTurn(record) {
+ const res=await fetch('/api/translate-stream',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token,'Accept':'text/event-stream'},body:JSON.stringify({text:record.text,target:record.target,context:medicalContext(record.text,record.context),history:[]}),signal:AbortSignal.timeout(60000)});
+ if(!res.ok){const data=await res.json().catch(()=>({}));throw Error(data.error||`請求失敗 (${res.status})`);}
+ let complete=false,translation='';
+ const parser=new SSEParser((event,data)=>{if(event==='error')throw Error(data.error||'術語校對失敗');if(event==='done'){translation=data.translation||'';complete=true;}});
+ const reader=res.body.getReader(), decoder=new TextDecoder();
+ while(true){const {value,done}=await reader.read();if(done)break;parser.push(decoder.decode(value,{stream:true}));}
+ if(!complete||!translation.trim())throw Error('未收到完整譯文');
+ if(records.includes(record) && $('medicalRefine')?.checked){
+  record.translationBeforeMedical=record.translation;
+  record.translation=isTraditionalChineseTarget(record.target)?toTaiwanTranscript(translation,'zh'):translation;
+  draw();persist();$('medicalRefineStatus').textContent='術語校對完成；請對照原文核實。';
+ }
 }
 function handleGeminiEvent(event,data,secondary=false) {
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
@@ -1487,7 +1531,7 @@ async function generateSummary() {
       },
       body: JSON.stringify({
         records: selected.map(({audio,...r})=>r), sessionId: summarySessionId,
-        context: $('context')?.value || '',
+        context: medicalContext(selected.map(r=>`${r.text||''} ${r.translation||''}`).join('\n'), $('context')?.value || ''),
         target: $('target')?.value || 'Traditional Chinese (Taiwan)'
       })
     });
