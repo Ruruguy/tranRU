@@ -1,6 +1,6 @@
 // Server-side relay: the long-lived Gemini key never reaches the browser.
 export function translationSetup(target) {
- const languages={'Traditional Chinese (Taiwan)':'zh-Hant',English:'en',Japanese:'ja'};
+ const languages={'Traditional Chinese (Taiwan)':'zh-Hant',English:'en',Japanese:'ja',Bengali:'bn'};
  if(!languages[target]) throw Error('不支援的翻譯語言');
  return {setup:{model:'models/gemini-3.5-live-translate-preview',inputAudioTranscription:{},outputAudioTranscription:{},generationConfig:{responseModalities:['AUDIO'],translationConfig:{targetLanguageCode:languages[target],echoTargetLanguage:false}}}};
 }

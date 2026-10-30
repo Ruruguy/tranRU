@@ -22,3 +22,16 @@ test('new session preserves old rows and refuses to interrupt in-flight translat
  sandbox.running=true;nodes.newSession.onclick();assert.equal(sandbox.summarySessionId,'old');
  sandbox.running=false;nodes.newSession.onclick();assert.equal(sandbox.summarySessionId,'new-1');assert.equal(sandbox.records[0].text,'old');assert.match(msg,/保留/);
 });
+test('Bengali language choices and unsupported Tuvaluan voice guards',async()=>{
+ const {translationSetup}=await import('./public/gemini-wire.js');
+ assert.equal(translationSetup('Bengali').setup.generationConfig.translationConfig.targetLanguageCode,'bn');
+ assert.throws(()=>translationSetup('Tuvaluan'));
+ assert.match(html,/<option value="bn">/);
+ assert.equal((html.match(/data-target="Tuvaluan"/g)||[]).length,2);
+ const nodes={convEngine:{value:'free'},convLangA:{value:'zh-TW'},convLangB:{value:'tvl'},convTextInput:{value:'hello'}};let message='';
+ const sandbox={$:id=>nodes[id],convStatus:s=>message=s,configured:true};
+ vm.runInNewContext(app.slice(app.indexOf('function sendManualConv('),app.indexOf("if ($('convSendA'))")),sandbox);
+ sandbox.sendManualConv('A');assert.match(message,/AI 大模型/);assert.equal(nodes.convTextInput.value,'hello');
+ vm.runInNewContext(app.slice(app.indexOf('function startConvSpeech('),app.indexOf('function stopConvSpeech(')),sandbox);
+ sandbox.startConvSpeech('A');assert.match(message,/手動文字/);
+});

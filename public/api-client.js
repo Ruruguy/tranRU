@@ -90,7 +90,7 @@ export function createBrowserAPI({fetcher=(...args)=>globalThis.fetch(...args),S
    if(path==='free-translate'){
     const text=String(data.text||'').slice(0,20000);
     if(!text.trim())return json({error:'文字內容為空'},400);
-    const langMap={'Traditional Chinese (Taiwan)':'zh-TW','zh-TW':'zh-TW','zh':'zh-TW','English':'en','en':'en','en-US':'en','Japanese':'ja','ja':'ja','ja-JP':'ja','Korean':'ko','ko':'ko','ko-KR':'ko','Spanish':'es','es':'es','es-ES':'es','French':'fr','fr':'fr','fr-FR':'fr','German':'de','de':'de','de-DE':'de'};
+    const langMap={'Traditional Chinese (Taiwan)':'zh-TW','zh-TW':'zh-TW','zh':'zh-TW','English':'en','en':'en','en-US':'en','Japanese':'ja','ja':'ja','ja-JP':'ja','Korean':'ko','ko':'ko','ko-KR':'ko','Spanish':'es','es':'es','es-ES':'es','French':'fr','fr':'fr','fr-FR':'fr','German':'de','de':'de','de-DE':'de','Bengali':'bn','bn':'bn','bn-BD':'bn'};
     const tl=langMap[data.target]||'zh-TW';
     const sl=langMap[data.source]||'auto';
     try{
