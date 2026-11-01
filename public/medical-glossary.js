@@ -112,6 +112,7 @@ const DATA = `
 內科與急診|急性胰臟炎|acute pancreatitis|
 兒科與婦產科|兒科病人|pediatric patient|
 兒科與婦產科|新生兒|newborn|neonate
+兒科與婦產科|阿普加評分|Apgar score|APGAR;Apgar
 兒科與婦產科|妊娠|pregnancy|
 兒科與婦產科|產後出血|postpartum hemorrhage|
 兒科與婦產科|子癲前症|preeclampsia|

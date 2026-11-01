@@ -50,3 +50,11 @@ test('local streaming applies terminology and refuses incomplete provider output
  const good=await call('/api/translate-stream',{text:'A patient has sepsis.',target:'Traditional Chinese (Taiwan)'});assert.match(good.body,/event: done/);assert.match(request.systemInstruction.parts[0].text,/敗血症 = sepsis/);
  mode='failure';const partial=await call('/api/translate-stream',{text:'sepsis',target:'Traditional Chinese (Taiwan)'});assert.match(partial.body,/event: error/);assert.doesNotMatch(partial.body,/event: done/);
 });
+
+test('Apgar terminology is recognized and reference includes the correct safety boundaries',async()=>{
+ const names=findMedicalTerms('APGAR score at 1 and 5 minutes',30).map(x=>x.zh);
+ assert.ok(names.includes('阿普加評分'));
+ const page=await readFile(new URL('./public/index.html',import.meta.url),'utf8');
+ for(const phrase of ['阿普加評分','總分 0～10 分','每分鐘 100 次以上','不能單獨決定是否開始復甦','不能等待評分'])assert.ok(page.includes(phrase),phrase);
+ assert.equal((page.match(/<tr><th scope="row">[APGAR]/g)||[]).length,5);
+});
