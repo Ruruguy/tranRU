@@ -481,7 +481,7 @@ function draw() {
 function updateStreamingRow(record) {
   if (!record.secondary && record.text && $('medicalTerms')) {
     const terms=findMedicalTerms(record.text, 8);
-    $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
+    $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.ja?' · '+t.ja:''}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}${t.note?' ［'+t.note+'］':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
   }
   if (record.languageSlot === 3 || $('tripleTranslation').checked) { draw(); return; }
   let row = null;

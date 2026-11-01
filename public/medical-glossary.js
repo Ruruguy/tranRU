@@ -1,5 +1,5 @@
 // Terminology references, not clinical protocols. See docs/medical-glossary-sources.md.
-// Fields: category | Taiwan Traditional Chinese | English | unambiguous abbreviations/aliases.
+// Fields: category | Taiwan Traditional Chinese | English | aliases | Japanese | contextual note.
 const DATA = `
 現場與交班|到院前救護|prehospital care|
 現場與交班|緊急醫療救護系統|emergency medical services|EMS
@@ -19,7 +19,7 @@ const DATA = `
 評估與生命徵象|格拉斯哥昏迷指數|Glasgow Coma Scale|GCS
 評估與生命徵象|瞳孔對光反射|pupillary light reflex|
 評估與生命徵象|呼吸速率|respiratory rate|
-評估與生命徵象|心跳速率|heart rate|
+評估與生命徵象|心跳速率|heart rate|心率|心拍数
 評估與生命徵象|血壓|blood pressure|
 評估與生命徵象|血氧飽和度|oxygen saturation|SpO2
 評估與生命徵象|呼氣末二氧化碳|end-tidal carbon dioxide|ETCO2
@@ -46,8 +46,8 @@ const DATA = `
 呼吸道與通氣|血胸|hemothorax|
 心血管與復甦|心肺停止|cardiac arrest|
 心血管與復甦|到院前心肺功能停止|out-of-hospital cardiac arrest|OHCA
-心血管與復甦|心肺復甦術|cardiopulmonary resuscitation|CPR
-心血管與復甦|胸外按壓|chest compressions|胸腔按壓
+心血管與復甦|心肺復甦術|cardiopulmonary resuscitation|CPR|心肺蘇生
+心血管與復甦|胸外按壓|chest compressions|胸腔按壓|胸骨圧迫
 心血管與復甦|自動體外心臟去顫器|automated external defibrillator|AED
 心血管與復甦|電擊去顫|defibrillation|
 心血管與復甦|自主循環恢復|return of spontaneous circulation|ROSC
@@ -111,8 +111,23 @@ const DATA = `
 內科與急診|急性闌尾炎|acute appendicitis|
 內科與急診|急性胰臟炎|acute pancreatitis|
 兒科與婦產科|兒科病人|pediatric patient|
-兒科與婦產科|新生兒|newborn|neonate
-兒科與婦產科|阿普加評分|Apgar score|APGAR;Apgar
+兒科與婦產科|新生兒|newborn|neonate|新生児
+兒科與婦產科|嬰兒|infant||乳児
+兒科與婦產科|阿普加評分|Apgar score|APGAR;Apgar;阿氏評分|アプガースコア
+兒科與婦產科|出生後一分鐘阿普加評分|one-minute Apgar score||生後1分のアプガースコア
+兒科與婦產科|出生後五分鐘阿普加評分|five-minute Apgar score||生後5分のアプガースコア
+兒科與婦產科|皮膚顏色|skin color|膚色|皮膚色
+兒科與婦產科|刺激反應|response to stimulation|反射反應|刺激に対する反応
+兒科與婦產科|肌肉張力|muscle tone|肌張力|筋緊張
+兒科與婦產科|呼吸努力|respiratory effort||呼吸努力
+兒科與婦產科|四肢發紺|acrocyanosis|周邊發紺|末梢チアノーゼ
+兒科與婦產科|新生兒復甦|neonatal resuscitation|新生兒甦醒|新生児蘇生
+兒科與婦產科|嬰兒心肺復甦|infant cardiopulmonary resuscitation|infant CPR;嬰兒CPR|乳児の心肺蘇生
+兒科與婦產科|雙拇指環胸按壓法|two-thumb encircling hands technique|two-thumb technique|胸郭包み込み両母指圧迫法
+兒科與婦產科|單手掌根按壓法|heel-of-one-hand technique|one-hand technique|片手の手掌基部による胸骨圧迫
+兒科與婦產科|雙指按壓法|two-finger chest compression technique|two-finger technique|2本指法|2025 AHA 嬰兒 CPR 不再建議；翻譯舊教材時仍須忠實保留講者原話。
+兒科與婦產科|正壓通氣|positive-pressure ventilation|PPV|陽圧換気
+兒科與婦產科|呼吸暫停|apnea|無呼吸|無呼吸
 兒科與婦產科|妊娠|pregnancy|
 兒科與婦產科|產後出血|postpartum hemorrhage|
 兒科與婦產科|子癲前症|preeclampsia|
@@ -133,8 +148,8 @@ const DATA = `
 感染與用藥|抗血小板藥|antiplatelet|
 `;
 export const MEDICAL_GLOSSARY = DATA.trim().split('\n').map(line => {
- const [category, zh, en, aliases=''] = line.split('|');
- return {category, zh, en, aliases:aliases ? aliases.split(';') : []};
+ const [category, zh, en, aliases='', ja='', note=''] = line.split('|');
+ return {category, zh, en, ja, note, aliases:aliases ? aliases.split(';') : []};
 });
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function matchesTerm(text, term) {
@@ -147,13 +162,13 @@ function matchesTerm(text, term) {
 }
 export function findMedicalTerms(text, limit=12) {
  const input=String(text||'');
- return MEDICAL_GLOSSARY.filter(item=>[item.zh,item.en,...item.aliases].some(term=>matchesTerm(input,term))).slice(0,limit);
+ return MEDICAL_GLOSSARY.filter(item=>[item.zh,item.en,item.ja,...item.aliases].some(term=>matchesTerm(input,term))).slice(0,limit);
 }
 export function medicalContext(text, existing='', limit=3000) {
  const matches=findMedicalTerms(text,30);
  if(!matches.length)return String(existing||'').slice(0,limit);
  const intro='【消防·救護·急診醫療中英日專業術語庫】以下術語僅供參考；依上下文判斷，不可憑空補充診斷、數值或處置。\n';
- const lines=matches.map(({zh,en,aliases})=>`${zh} = ${en}${aliases.length ? ' ('+aliases.join(', ')+')' : ''}`);
+ const lines=matches.map(({zh,en,ja,aliases})=>`${zh} = ${en}${ja ? ' = '+ja : ''}${aliases.length ? ' ('+aliases.join(', ')+')' : ''}`);
  let result=intro;
  for(const line of lines){if(result.length+line.length+1>limit)break;result+=line+'\n';}
  const remainder=String(existing||'').trim();

@@ -58,3 +58,16 @@ test('Apgar terminology is recognized and reference includes the correct safety 
  for(const phrase of ['阿普加評分','總分 0～10 分','每分鐘 100 次以上','不能單獨決定是否開始復甦','不能等待評分'])assert.ok(page.includes(phrase),phrase);
  assert.equal((page.match(/<tr><th scope="row">[APGAR]/g)||[]).length,5);
 });
+
+test('newborn and Apgar terminology matches Chinese, English and Japanese without rewriting legacy techniques',()=>{
+ for(const text of ['阿普加評分','Apgar score','アプガースコア']){
+  const match=findMedicalTerms(text,30).find(t=>t.zh==='阿普加評分');
+  assert.ok(match,text);assert.equal(match.en,'Apgar score');assert.equal(match.ja,'アプガースコア');
+ }
+ for(const [text,zh] of [['筋緊張','肌肉張力'],['respiratory effort','呼吸努力'],['心拍数','心跳速率'],['新生児蘇生','新生兒復甦'],['胸郭包み込み両母指圧迫法','雙拇指環胸按壓法']]){
+  assert.ok(findMedicalTerms(text,30).some(t=>t.zh===zh),text);
+ }
+ const legacy=findMedicalTerms('2本指法',30).find(t=>t.zh==='雙指按壓法');
+ assert.ok(legacy);assert.match(legacy.note,/2025 AHA.*不再建議/);
+ const context=medicalContext('2本指法');assert.match(context,/two-finger chest compression technique/);assert.match(context,/2本指法/);assert.doesNotMatch(context,/不再建議/);
+});
