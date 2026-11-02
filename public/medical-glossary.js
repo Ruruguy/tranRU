@@ -33,6 +33,8 @@ const DATA = `
 評估與生命徵象|毛細血管再充填|capillary refill|
 呼吸道與通氣|呼吸道阻塞|airway obstruction|
 呼吸道與通氣|呼吸衰竭|respiratory failure|
+呼吸道與通氣|有效通氣|effective ventilation|有效的肺部通氣;有效肺部通氣|有効な換気
+呼吸道與通氣|肺部充氣|lung inflation|肺充氣|肺の拡張
 呼吸道與通氣|呼吸停止|respiratory arrest|
 呼吸道與通氣|缺氧|hypoxia|
 呼吸道與通氣|低血氧症|hypoxemia|
