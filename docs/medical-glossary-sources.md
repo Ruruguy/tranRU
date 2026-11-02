@@ -15,3 +15,4 @@
 # 休克與意識狀態
 
 - MSD Manual Professional: [Shock](https://www.msdmanuals.com/professional/critical-care-medicine/shock-and-fluid-resuscitation/shock), [ショック](https://www.msdmanuals.com/ja-jp/professional/21-%E6%95%91%E5%91%BD%E5%8C%BB%E7%99%82/%E3%82%B7%E3%83%A7%E3%83%83%E3%82%AF%E3%81%8A%E3%82%88%E3%81%B3%E8%BC%B8%E6%B6%B2%E8%98%87%E7%94%9F/%E3%82%B7%E3%83%A7%E3%83%83%E3%82%AF). 用於核對休克與意識狀態相關中英日術語；不是診斷或治療指引。
+- [2025 AHA／AAP 新生兒復甦指引](https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines/neonatal-resuscitation)：需要復甦的新生兒，以建立有效肺部通氣為優先；心率上升是有效通氣的重要指標。
