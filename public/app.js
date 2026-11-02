@@ -96,7 +96,7 @@ $('save').onclick = async () => {
 };
 
 $('clearKeys').onclick=async()=>{
- if(running || starting || convActiveSpeaker){$('configStatus').textContent='請先停止聆聽，再清除金鑰';return;}
+ if(running || starting || convActiveSpeaker || convLiveRunning || convLiveClients.length){$('configStatus').textContent='請先停止聆聽，再清除金鑰';return;}
  try {
   const response=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({key:'',geminiKey:''})});
   const result=await response.json();if(!response.ok)throw Error(result.error);
@@ -1590,6 +1590,7 @@ if ($('downloadSummary')) {
 async function switchMode(mode) {
   if(starting)return;
   if(mode==='conversation' && running)await stop();
+  if(mode!=='conversation') stopConvLive();
   stopConvSpeech();
   convEpoch++;
   window.speechSynthesis?.cancel();
@@ -1974,6 +1975,63 @@ if ($('convExport')) {
 
 
 window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?.cancel();});
+
+// Three independent translation sessions share one microphone. Live Translate
+// supplies language detection, but does not identify individual speakers.
+let convLiveGeneration=0, convLiveRunning=false, convLiveStream=null, convLiveContext=null;
+let convLiveNodes=[], convLiveClients=[];
+const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
+function appendConvLive(id,text) {
+ const el=$(id); if(!el)return;
+ if(el.dataset.empty==='yes'){el.textContent='';el.dataset.empty='no';}
+ el.textContent=(el.textContent+text).slice(-12000);
+ el.scrollTop=el.scrollHeight;
+}
+function resetConvLiveText(){
+ for(const id of ['convLiveSource','convLiveZh','convLiveEn','convLiveJa']){$(id).textContent='';$(id).dataset.empty='no';}
+ $('convDetected').textContent='等待語音';
+}
+function stopConvLive(message='○ 已停止聆聽'){
+ ++convLiveGeneration;convLiveRunning=false;
+ for(const client of convLiveClients)client.close();convLiveClients=[];
+ for(const node of convLiveNodes){try{node.disconnect();}catch{}}convLiveNodes=[];
+ convLiveStream?.getTracks().forEach(track=>track.stop());convLiveStream=null;
+ convLiveContext?.close().catch(()=>{});convLiveContext=null;
+ $('convLiveStart').disabled=false;$('convLiveStart').textContent='● 開始三語即時聆聽';$('convLiveStatus').textContent=message;
+}
+if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
+ if(convLiveRunning){stopConvLive();return;}
+ if(!geminiConfigured){$('dialog').showModal();$('convLiveStatus').textContent='請先設定 Gemini API 金鑰';return;}
+ stopConvSpeech();window.speechSynthesis?.cancel();
+ const generation=++convLiveGeneration;
+ $('convLiveStart').disabled=true;$('convLiveStatus').textContent='正在取得麥克風並連線三種語言…';
+ try{
+  const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
+  convLiveStream=captured;
+  const clients=convLiveTargets.map(([target,id],index)=>new GeminiLiveClient({token,onEvent:(event,data)=>{
+   if(generation!==convLiveGeneration)return;
+   if(event==='input'&&index===0&&data.text){
+    if(data.languageCode){const code=data.languageCode.toLowerCase();$('convDetected').textContent=code.startsWith('zh')?'中文':code.startsWith('en')?'英文':code.startsWith('ja')?'日文':data.languageCode;}
+    appendConvLive('convLiveSource',toTaiwanTranscript(data.text,data.languageCode||''));
+   }
+   if(event==='output'&&data.text)appendConvLive(id,index===0?toTaiwanTranscript(data.text,'zh'):data.text);
+   if(event==='turn'){appendConvLive(id,'\n');if(index===0)appendConvLive('convLiveSource','\n');}
+  },onFailure:error=>{if(generation===convLiveGeneration)stopConvLive('即時翻譯連線中斷：'+error.message);}}));
+  convLiveClients=clients;
+  await Promise.all(clients.map((client,index)=>client.connect(convLiveTargets[index][0])));
+  if(generation!==convLiveGeneration)return;
+  const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
+  await audioContext.resume();if(generation!==convLiveGeneration)return;
+  const input=audioContext.createMediaStreamSource(captured),processor=audioContext.createScriptProcessor(2048,1,1),sink=audioContext.createGain(),chunks=new PCMChunks(audioContext.sampleRate);
+  convLiveNodes=[input,processor,sink];sink.gain.value=0;input.connect(processor);processor.connect(sink);sink.connect(audioContext.destination);
+  processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;for(const chunk of chunks.push(e.inputBuffer.getChannelData(0)))for(const client of clients)client.send(chunk);};
+  for(const track of captured.getAudioTracks())track.onended=()=>{if(generation===convLiveGeneration)stopConvLive('麥克風已停止');};
+  convLiveRunning=true;$('convLiveStart').disabled=false;$('convLiveStart').textContent='■ 停止聆聽';$('convLiveStatus').textContent='● 自動偵測語言，三語即時翻譯中';
+ }catch(error){if(generation===convLiveGeneration)stopConvLive('無法啟動：'+error.message);}
+};
+if($('convLiveClear'))$('convLiveClear').onclick=resetConvLiveText;
+window.addEventListener('pagehide',()=>stopConvLive());
 
 // Firefighting, Rescue & EMS Glossary Management
 const DEFAULT_FIRE_EMS_GLOSSARY = `【消防·救護·急診醫療中英日專業術語庫】

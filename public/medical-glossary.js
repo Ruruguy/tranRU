@@ -16,6 +16,11 @@ const DATA = `
 現場與交班|預估到院時間|estimated time of arrival|ETA
 評估與生命徵象|生命徵象|vital signs|
 評估與生命徵象|意識狀態|level of consciousness|LOC
+評估與生命徵象|意識改變|altered mental status|意識狀態改變;意識不清|意識障害
+評估與生命徵象|意識喪失|loss of consciousness|失去意識|意識消失
+評估與生命徵象|意識混亂|confusion||錯乱
+評估與生命徵象|嗜睡|drowsiness|嗜眠|傾眠
+評估與生命徵象|昏迷|coma||昏睡
 評估與生命徵象|格拉斯哥昏迷指數|Glasgow Coma Scale|GCS
 評估與生命徵象|瞳孔對光反射|pupillary light reflex|
 評估與生命徵象|呼吸速率|respiratory rate|
@@ -61,6 +66,11 @@ const DATA = `
 心血管與復甦|心因性休克|cardiogenic shock|
 心血管與復甦|低血容性休克|hypovolemic shock|
 心血管與復甦|過敏性休克|anaphylactic shock|
+心血管與復甦|休克|shock||ショック
+心血管與復甦|敗血性休克|septic shock||敗血症性ショック
+心血管與復甦|出血性休克|hemorrhagic shock||出血性ショック
+心血管與復甦|阻塞性休克|obstructive shock||閉塞性ショック
+心血管與復甦|組織灌流不足|tissue hypoperfusion|低灌流|組織低灌流
 心血管與復甦|嚴重過敏反應|anaphylaxis|
 創傷與止血|外傷性腦損傷|traumatic brain injury|TBI
 創傷與止血|脊髓損傷|spinal cord injury|
