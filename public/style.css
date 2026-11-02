@@ -910,6 +910,14 @@ body.focus .second-panel #secondRows{max-height:45vh}
 .conversation-view {
   animation: fadeIn 0.2s ease;
 }
+.conv-live-panel {margin:20px 0;padding:20px;background:var(--bg-surface-card);border:1px solid var(--border-ash);border-radius:20px}
+.conv-live-actions {display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.conv-live-source,.conv-live-grid section {padding:16px;background:rgba(255,255,255,.04);border:1px solid var(--border-ash);border-radius:12px;min-width:0}
+.conv-live-source {margin:16px 0}
+.conv-live-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.conv-live-grid h3 {margin:0 0 12px;font-size:15px}
+.conv-live-grid p,.conv-live-source p {white-space:pre-wrap;overflow-wrap:anywhere;max-height:45vh;overflow:auto;line-height:1.7}
+@media(max-width:700px){.conv-live-grid{grid-template-columns:1fr}}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }

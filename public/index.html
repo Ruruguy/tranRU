@@ -258,6 +258,13 @@
         </div>
       </header>
 
+      <section class="conv-live-panel">
+        <div class="conv-live-actions"><button id="convLiveStart">● 開始三語即時聆聽</button><button id="convLiveClear">清空即時字幕</button><span id="convLiveStatus">需要 Gemini API 金鑰</span></div>
+        <p class="note">自動偵測中文、英文或日文；三個 Gemini 連線會分別計費。每次儘量由一人說話；即時模式無法辨識說話者身分，語言與醫學術語仍需人工核對。</p>
+        <div class="conv-live-source"><strong>偵測原文 · <span id="convDetected">等待語音</span></strong><p id="convLiveSource">等待開始聆聽…</p></div>
+        <div class="conv-live-grid"><section><h3>繁體中文 · 台灣</h3><p id="convLiveZh">等待翻譯…</p></section><section><h3>English · 英文</h3><p id="convLiveEn">等待翻譯…</p></section><section><h3>日本語 · 日文</h3><p id="convLiveJa">等待翻譯…</p></section></div>
+      </section>
+      <details><summary>手動雙語對話與文字輸入</summary>
       <section class="controls conv-controls">
         <label>我方語言 (母語)
           <select id="convLangA">
@@ -338,6 +345,7 @@
           <button id="convSendB" title="以對方身份發送並翻譯">對方送出</button>
         </div>
       </div>
+      </details>
     </div>
   </main>
 
