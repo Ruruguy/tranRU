@@ -1240,3 +1240,35 @@ body.focus .second-panel #secondRows{max-height:45vh}
 .apgar-table caption { text-align: left; padding: 6px; }
 .apgar-table th, .apgar-table td { border: 1px solid var(--border-ash); padding: 8px; text-align: left; vertical-align: top; }
 body.focus .medical-reference { display: none; }
+
+/* Fixed presentation panes: long translations cannot scroll another language away. */
+.presentation-live, .presentation-status { display: none; }
+body.presenting #lectureView #panelHead,
+body.presenting #lectureView #rows { display: none; }
+body.presenting .topbar,
+body.presenting #lectureView > header,
+body.presenting #lectureView .controls,
+body.presenting #lectureView .statusbar,
+body.presenting #lectureView .lecture-actions,
+body.presenting #lectureView .medical-reference,
+body.presenting #lectureView .note,
+body.presenting #lectureView > details { display: none !important; }
+body.presenting main { margin:0; width:100%; max-width:none; padding:12px; }
+body.presenting #lectureView .transcript-portal-wrap { margin:0; }
+body.presenting .presentation-live {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-rows:minmax(0,1fr); height:calc(100dvh - 86px); min-height:0;
+}
+body.presenting .presentation-live:has(> :nth-child(3)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
+body.presenting .presentation-live.presentation-triple { grid-template-rows:minmax(0,1fr) minmax(0,2fr); }
+.presentation-triple > :first-child { grid-column:1 / -1; }
+.presentation-pane { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border:1px solid var(--border-ash); }
+.presentation-heading { flex:none; font-size:14px; margin:0; padding:10px 16px; color:var(--text-pale-mist); }
+.presentation-body { flex:1; min-height:0; overflow-y:auto; overflow-anchor:none; scroll-behavior:auto; padding:0 18px 12px; overflow-wrap:anywhere; }
+.presentation-sentence { font-size:var(--subtitle); line-height:1.65; white-space:pre-wrap; }
+.presentation-sentence + .presentation-sentence { margin-top:20px; }
+.presentation-sentence time { font-size:11px; color:var(--text-smoke); }
+.presentation-sentence p { margin:3px 0 0; }
+.presentation-sentence small { font-size:13px; color:#ffc78a; }
+.presentation-state { flex:none; font-size:11px; padding:6px 16px; color:var(--text-smoke); max-height:3em; overflow:auto; }
+body.presenting .presentation-status { display:block; margin:0; padding:8px 16px; font-size:12px; height:38px; overflow:auto; box-sizing:border-box; color:var(--text-pale-mist); }

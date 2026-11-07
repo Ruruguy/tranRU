@@ -4,6 +4,7 @@ import {ContinuousGeminiClient as GeminiLiveClient, PCMChunks, SSEParser} from '
 import {selectSummaryRecords} from './summary-core.js';
 import {toTaiwanTranscript, isTraditionalChineseTarget} from './traditional.js';
 import {findMedicalTerms, medicalContext} from './medical-glossary.js';
+import {presentationLanes,renderPresentation} from './presentation.js';
 import {AzureSpeechClient, validateAzureConfig} from './azure-client.js';
 let azureKey = '', azureRegion = '';
 const $ = id => document.getElementById(id);
@@ -47,7 +48,7 @@ let pipWindow = null;
 let speechRecognizer = null;
 let currentNativeRecord = null;
 
-const status = t => $('status').textContent = t;
+const status = t => { $('status').textContent = t; if($('presentationStatus'))$('presentationStatus').textContent=t; };
 
 // Initial server status & CSRF token
 try {
@@ -171,8 +172,10 @@ $('thirdTarget').onchange = syncDualUI;
 syncDualUI();
 
 // UI Controls
-if ($('font')) $('font').oninput = () => document.documentElement.style.setProperty('--subtitle', $('font').value + 'px');
+if ($('font')) $('font').oninput = () => {document.documentElement.style.setProperty('--subtitle', $('font').value + 'px');refreshPresentation();};
 function syncCompactControls() {
+  document.body.classList.toggle('presenting',document.body.classList.contains('focus') || !!document.fullscreenElement);
+  draw();
   if ($('exitCompact')) {
     $('exitCompact').hidden = !document.body.classList.contains('focus') && !document.fullscreenElement;
   }
@@ -358,8 +361,23 @@ function getRecentHistory() {
     .map(r => ({text: r.text, translation: r.translation}));
 }
 
+function refreshPresentation() {
+  const container=$('presentationLive');
+  if(!container || !document.body.classList.contains('presenting'))return;
+  const dual=$('dualTranslation').checked, triple=dual&&$('tripleTranslation').checked;
+  const label=id=>$(id).selectedOptions[0]?.textContent||$(id).value;
+  renderPresentation(container,presentationLanes(records,{dual,triple,labels:['講者原文',label('target'),label('secondTarget'),label('thirdTarget')]}),{triple});
+}
+window.addEventListener('resize',()=>requestAnimationFrame(refreshPresentation));
+
 // Render DOM
 function draw() {
+  refreshPresentation();
+  if(document.body.classList.contains('presenting')){
+    $('count').textContent=records.filter(r=>!r.secondary).length;
+    if(typeof updatePiP==='function')updatePiP();
+    return;
+  }
   const el = $('rows');
   const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   el.replaceChildren();
@@ -492,6 +510,8 @@ function draw() {
 }
 
 function updateStreamingRow(record) {
+  refreshPresentation();
+  if(document.body.classList.contains('presenting')){if(typeof updatePiP==='function')updatePiP();return;}
   if (!record.secondary && record.text && $('medicalTerms')) {
     const terms=findMedicalTerms(record.text, 8);
     $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.ja?' · '+t.ja:''}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}${t.note?' ［'+t.note+'］':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
