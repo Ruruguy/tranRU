@@ -1,11 +1,18 @@
-// Server-side relay: the long-lived Gemini key never reaches the browser.
+import {MEDICAL_GLOSSARY} from './medical-glossary.js';
+// Hosted mode keeps the visitor's key in the browser session only.
+export function transcriptionSetup(language='auto') {
+ const languages={en:'en-US',ja:'ja-JP',ko:'ko-KR',zh:'cmn-Hans-CN',es:'es-ES',fr:'fr-FR',de:'de-DE',bn:'bn-BD'};
+ const priority=['休克','意識不清','意識改變','意識喪失','敗血症','敗血性休克','心因性休克','低血容性休克','呼吸暫停','新生兒復甦','正壓通氣','氣管內插管','聲門上呼吸道','格拉斯哥昏迷指數','NRP','MR SOPA','Apgar','CPR'];
+ const terms=[...new Set([...priority,...MEDICAL_GLOSSARY.flatMap(item=>[item.zh,item.en,item.ja].filter(Boolean))])].slice(0,100);
+ return {setup:{model:'models/gemini-3.5-transcribe-live',generationConfig:{responseModalities:['TEXT']},inputAudioTranscription:{languageCodes:languages[language]?[languages[language]]:[],customVocabulary:terms,mode:'VERBATIM'}}};
+}
 export function translationSetup(target) {
  const languages={'Traditional Chinese (Taiwan)':'zh-Hant',English:'en',Japanese:'ja',Bengali:'bn'};
  if(!languages[target]) throw Error('不支援的翻譯語言');
  return {setup:{model:'models/gemini-3.5-live-translate-preview',inputAudioTranscription:{},outputAudioTranscription:{},generationConfig:{responseModalities:['AUDIO'],translationConfig:{targetLanguageCode:languages[target],echoTargetLanguage:true}}}};
 }
-export function openGeminiRelay({key,target,emit,finish,Socket=WebSocket}) {
- const setup=translationSetup(target);
+export function openGeminiRelay({key,target,mode,language,emit,finish,Socket=WebSocket}) {
+ const setup=mode==='transcribe'?transcriptionSetup(language):translationSetup(target);
  const ws=new Socket('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='+encodeURIComponent(key));
  let ready=false,closed=false,ending=false,lastInput=Date.now();
  const safe=message=>String(message).replaceAll(key,'[redacted]');
@@ -23,7 +30,7 @@ export function openGeminiRelay({key,target,emit,finish,Socket=WebSocket}) {
    if(m.setupComplete){ready=true;clearTimeout(setupTimer);emit('ready',{});}
    const c=m.serverContent;
    // Discard audio output deliberately: display subtitles without speaker feedback.
-   if(c){if(c.inputTranscription)emit('input',c.inputTranscription);if(c.outputTranscription)emit('output',c.outputTranscription);if(c.turnComplete)emit('turn',{});if(c.interrupted)emit('turn',{});}
+   if(c){if(c.interimInputTranscription)emit('interim',c.interimInputTranscription);if(c.inputTranscription)emit(mode==='transcribe'?'final':'input',c.inputTranscription);if(c.outputTranscription)emit('output',c.outputTranscription);if(c.turnComplete)emit('turn',{});if(c.interrupted)emit('turn',{});}
    if(m.goAway){if(ending)close();else fail('Gemini 工作階段即將到期，請重新啟動或使用 OpenAI 備用');}
   }catch{fail('Gemini 訊息格式無法解析');}
  });

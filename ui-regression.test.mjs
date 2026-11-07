@@ -12,6 +12,13 @@ test('page module parses and required controls exist in valid UTF-8',()=>{
  for(const id of ['start','newSession','summaryBtn','export','clear','autoscroll','secondStatus'])assert.match(html,new RegExp(`id="${id}"`));
  assert.doesNotMatch(html, /name="tranru-mode"/);
 });
+test('precision mode updates interim text and translates only a finalized utterance',()=>{
+ const requests=[];const records=[];const sandbox={precisionRecord:null,records,toTaiwanTranscript,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
+ vm.runInNewContext(app.slice(app.indexOf('function handlePrecisionEvent('),app.indexOf('function handleGeminiEvent(')),sandbox);
+ sandbox.handlePrecisionEvent('interim',{text:'意识'});assert.equal(records[0].text,'意識');assert.equal(requests.length,0);
+ sandbox.handlePrecisionEvent('interim',{text:'意识不清'});assert.equal(records[0].text,'意識不清');
+ sandbox.handlePrecisionEvent('final',{text:'意识不清'});assert.equal(requests.length,1);assert.equal(requests[0][2].text,'意識不清');assert.equal(sandbox.precisionRecord,null);
+});
 test('free language mapping distinguishes French from English and locale codes',()=>{
  const sandbox={};vm.runInNewContext(app.slice(app.indexOf('function mapToGoogleLang'),app.indexOf('function applyGlossaryToText')),sandbox);
  for(const [value,expected] of [['French','fr'],['fr-FR','fr'],['English','en'],['Japanese','ja'],['Traditional Chinese (Taiwan)','zh-TW'],['auto','auto']]) assert.equal(sandbox.mapToGoogleLang(value),expected);

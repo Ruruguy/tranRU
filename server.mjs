@@ -367,6 +367,8 @@ const handle = async (req, res) => {
           relay = openGeminiRelay({
             key: geminiKey,
             target: data.target || 'Traditional Chinese (Taiwan)',
+            mode: data.mode,
+            language: data.language,
             emit: (event, value) => {if(!res.destroyed)res.write(`event: ${event}\ndata: ${JSON.stringify({...value, id})}\n\n`);},
             finish: () => {cleanup();res.end();}
           });
