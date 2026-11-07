@@ -73,6 +73,11 @@ test('Gemini errors redact keys and clean up exactly once',()=>{
  FakeSocket.last.message({error:{message:'invalid secret'}});
  assert.equal(events[0].error,'invalid [redacted]');assert.equal(finished,1);relay.close();assert.equal(finished,1);
 });
+test('GoAway requests rotation while allowing the final subtitle to drain',()=>{
+ const events=[];let finished=0;
+ const relay=openGeminiRelay({key:'test-key',target:'English',Socket:FakeSocket,emit:(e,d)=>events.push([e,d]),finish:()=>finished++});
+ try{const ws=FakeSocket.last;ws.message({setupComplete:{}});ws.message({goAway:{timeLeft:'10s'}});assert.equal(finished,0);assert.equal(events.at(-1)[0],'rotate');ws.message({serverContent:{outputTranscription:{text:'final words'},turnComplete:true}});assert.equal(events.at(-2)[1].text,'final words');assert.equal(events.at(-1)[0],'turn');}finally{relay.close();}
+});
 test('SSE survives network fragments including split event/data lines',()=>{
  const events=[];const p=new SSEParser((event,data)=>events.push([event,data]));
  for(const fragment of ['event: delta\n','data: {"delta":"繁','體"}\n','\nevent: done\ndata: {}\n\n'])p.push(fragment);
