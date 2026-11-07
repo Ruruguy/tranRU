@@ -31,6 +31,17 @@ npm start
 - 收到 Gemini 工作階段到期通知會切換備用或停止；目前不支援 Gemini 工作階段續接。長演講可使用 OpenAI 備用，或停止後重新開始 Gemini。
 - 點停止會送出剩餘音訊與結束訊號，短暫等候最後字幕後關閉連線。關閉分頁會清理上游連線。
 
+## Azure Speech 模式
+
+演講頁的辨識引擎可選「Azure Speech ＋ Gemini／OpenAI 翻譯」。在服務設定輸入自己的 **Azure Speech 資源金鑰與區域代碼**（例如 `eastasia`），再設定 Gemini 或 OpenAI 文字翻譯金鑰，並選擇相應翻譯服務商。這不是 Azure OpenAI，亦不是只靠一組 Azure 金鑰的獨立翻譯服務。
+
+- 指定演講語言；繁體中文使用 `zh-TW`。此模式目前不提供自動語言偵測，雙向對話頁仍沿用原本引擎。
+- 中文、英文及日文套用醫療詞彙提示，確定原文後再進行一至三語翻譯。提示不保證辨識正確。
+- 沿用自動重新連線、字幕保留、逐字稿匯出與摘要。Azure 語音辨識和 Gemini／OpenAI 文字翻譯分別計費。
+- Azure 金鑰只存在當前分頁記憶體（本機與 GitHub Pages 均同），不送至 tranRU 後端、不存瀏覽器儲存、不寫入 Git；重新整理需重填。音訊及詞彙提示直接送至 Microsoft，原文送至選定的文字翻譯服務。
+- SDK 固定為官方 npm `microsoft-cognitiveservices-speech-sdk` 1.53.0，保留授權於 `public/vendor/azure-speech-LICENSE.txt`，停用 SDK telemetry。
+- 本次回歸測試使用 SDK 測試替身；沒有使用真實 Azure 憑證，因此真實收音、帳戶權限、長時間品質仍待驗收。
+
 ## OpenAI 模式
 
 保留智慧停頓切段、瀏覽器原生語音辨識與手動文字翻譯。手動文字翻譯需要 OpenAI 金鑰，Gemini Live Translate 僅接受音訊。
