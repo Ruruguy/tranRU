@@ -1,6 +1,6 @@
 import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
-import {GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
+import {ContinuousGeminiClient as GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
 import {selectSummaryRecords} from './summary-core.js';
 import {toTaiwanTranscript, isTraditionalChineseTarget} from './traditional.js';
 import {findMedicalTerms, medicalContext} from './medical-glossary.js';
@@ -415,7 +415,7 @@ function draw() {
       cellB.append(cursor);
     } else if (r.state === 'error') {
       cellB.classList.add('failed');
-      cellB.textContent = classifyServiceError(r.error).message || '處理失敗';
+      cellB.textContent = (r.translation ? r.translation+'\n' : '')+(classifyServiceError(r.error).message || '處理失敗');
       if (r.audio || r.text) {
         const retryBtn = document.createElement('button');
         retryBtn.className = 'retry';
@@ -447,7 +447,7 @@ function draw() {
           cellC.append(cursor);
         } else if (sec.state === 'error') {
           cellC.classList.add('failed');
-          cellC.textContent = classifyServiceError(sec.error).message || '第二語言失敗';
+          cellC.textContent = (sec.translation ? sec.translation+'\n' : '')+(classifyServiceError(sec.error).message || '第二語言失敗');
         } else {
           cellC.textContent = sec.translation || '';
         }
@@ -465,7 +465,7 @@ function draw() {
     if (isTriple) {
       const third = records.find(s => s.secondary && s.languageSlot === 3 && s.parentId === r.id);
       const cell = document.createElement('div'); cell.className = 'cell';
-      cell.textContent = third ? (third.state === 'error' ? (third.error || '第三語言失敗') : (third.translation || '等待第三語言…')) : '等待第三語言…';
+      cell.textContent = third ? (third.state === 'error' ? ((third.translation?third.translation+'\n':'')+(third.error || '第三語言失敗')) : (third.translation || '等待第三語言…')) : '等待第三語言…';
       if(third?.translationBeforeMedical){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看校對前即時譯文';details.append(summary,document.createTextNode(third.translationBeforeMedical));cell.append(details);}
       row.append(cell);
     }
@@ -516,7 +516,7 @@ function updateStreamingRow(record) {
         }
       } else if (record.state === 'error') {
         cells[2].classList.add('failed');
-        cells[2].textContent = record.error || '第二語言失敗';
+        cells[2].textContent = (record.translation?record.translation+'\n':'')+(record.error || '第二語言失敗');
         const primary = records.find(r => !r.secondary && r.id === (record.parentId || row.id.replace('row-', '')));
         if (!primary || primary.state === 'done' || primary.state === 'error') {
           row.classList.remove('live-active');
@@ -1205,7 +1205,7 @@ $('start').onclick = async () => {
     $('start').textContent = '■ 停止聆聽';
     for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
     $('badge').textContent = gemini ? ($('engine').value==='precision'?'專業精準':'Gemini 串流') : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
-    status(gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯（約 10 分鐘需重新連線）':'● Gemini 即時翻譯 · 語言自動偵測') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
+    status(gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
     try {
       wake = await navigator.wakeLock?.request('screen');
@@ -1283,7 +1283,7 @@ $('export').onclick = () => {
     return;
   }
   const text = '# 演講口譯逐字稿\n\n' +
-    records.map(r => `## ${r.time}${r.demo ? '（示範）' : ''} · ${r.target || '譯文'}${r.secondary ? '（第二語言）' : ''}\n\n**原文**：${r.text || '（無語音）'}\n\n**譯文**：${r.translation || r.error || '處理中'}\n`).join('\n');
+    records.map(r => `## ${r.time}${r.demo ? '（示範）' : ''} · ${r.target || '譯文'}${r.secondary ? '（第二語言）' : ''}\n\n**原文**：${r.text || '（無語音）'}\n\n**譯文**：${r.translation || r.error || '處理中'}${r.state==='error'?'\n\n**未完成提示**：'+(r.error||'此段未完成'):''}\n`).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], {type: 'text/markdown;charset=utf-8'}));
   a.download = `lecture-translation-${new Date().toISOString().slice(0, 10)}.md`;
@@ -1362,7 +1362,21 @@ async function refineMedicalTurn(record) {
   draw();persist();$('medicalRefineStatus').textContent='術語校對完成；請對照原文核實。';
  }
 }
+function handleReconnectNotice(event,data,label) {
+ const messages={reconnecting:'正在自動重新連線，暫存收音中',reconnected:'已恢復連線，字幕繼續保留',gap:'部分音訊未能送出，可能缺字；已收到的字幕仍保留'};
+ if(!messages[event])return false;
+ const el=$('reconnectStatus');
+ if(el)el.textContent=(el.textContent+'\n'+label+'：'+messages[event]).trim().split('\n').slice(-6).join('\n');
+ if(event==='gap'){
+  newRecord({state:'error',text:'[連線提示] '+label,error:messages.gap,target:'連線狀態',secondTarget:null,thirdTarget:null});persist();
+ }
+ return true;
+}
 function handlePrecisionEvent(event,data) {
+ if(handleReconnectNotice(event,data,'辨識'))return;
+ if(event==='boundary'){
+  if(precisionRecord){precisionRecord.state='error';precisionRecord.error='重新連線前的辨識未完成；保留暫定原文供核對。';precisionRecord=null;draw();persist();}return;
+ }
  if((event!=='interim' && event!=='final') || !data.text)return;
  if(!precisionRecord)precisionRecord=newRecord({provider:'gemini-transcribe',state:'streaming'});
  precisionRecord.text=toTaiwanTranscript(data.text,data.languageCode||precisionRecord.language);
@@ -1374,6 +1388,8 @@ function handlePrecisionEvent(event,data) {
  }
 }
 function handleGeminiEvent(event,data,secondary=false) {
+ if(handleReconnectNotice(event,data,secondary===3?'第三語言':secondary?'第二語言':'第一語言'))return;
+ if(event==='boundary'){finishLiveRecord(true,secondary);return;}
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
  if((event!=='input' && event!=='output')||!data.text)return;
  let r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
@@ -1999,7 +2015,7 @@ const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English',
 function appendConvLive(id,text) {
  const el=$(id); if(!el)return;
  if(el.dataset.empty==='yes'){el.textContent='';el.dataset.empty='no';}
- el.textContent=(el.textContent+text).slice(-12000);
+ el.textContent+=text;
  el.scrollTop=el.scrollHeight;
 }
 function resetConvLiveText(){
@@ -2026,6 +2042,12 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   convLiveStream=captured;
   const clients=convLiveTargets.map(([target,id],index)=>new GeminiLiveClient({token,onEvent:(event,data)=>{
    if(generation!==convLiveGeneration)return;
+   if(['reconnecting','reconnected','gap'].includes(event)){
+    const message=event==='reconnecting'?'正在自動重新連線，暫存收音中':event==='reconnected'?'已恢復連線':'音訊暫存不足或未送出，可能缺字';
+    $('convLiveStatus').textContent=target+'：'+message;
+    if(event==='gap')appendConvLive(id,'\n[連線中斷，這段可能缺字]\n');return;
+   }
+   if(event==='boundary'){appendConvLive(id,'\n[連線已更換，上段末尾請核對原聲]\n');if(index===0)appendConvLive('convLiveSource','\n');return;}
    if(event==='input'&&index===0&&data.text){
     if(data.languageCode){const code=data.languageCode.toLowerCase();$('convDetected').textContent=code.startsWith('zh')?'中文':code.startsWith('en')?'英文':code.startsWith('ja')?'日文':data.languageCode;}
     appendConvLive('convLiveSource',toTaiwanTranscript(data.text,data.languageCode||''));
