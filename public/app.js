@@ -13,8 +13,9 @@ let openaiConfigured = false, geminiConfigured = false;
 let gemini = null, pcm = null, liveRecord = null;
 let geminiSecond = null, secondLiveRecord = null;
 let geminiThird = null, thirdLiveRecord = null;
+let precisionRecord = null;
 let liveBatch = '', liveTurnCounts = [0, 0, 0];
-const canStart = () => $('engine').value === 'free' ? true : $('engine').value === 'gemini' ? geminiConfigured : (openaiConfigured || geminiConfigured);
+const canStart = () => $('engine').value === 'free' ? true : ['gemini','precision'].includes($('engine').value) ? geminiConfigured : (openaiConfigured || geminiConfigured);
 function updateKeys(s) {
  openaiConfigured = s.openaiConfigured ?? s.configured; geminiConfigured = !!s.geminiConfigured; configured = openaiConfigured || geminiConfigured;
  if ($('keyStatus')) $('keyStatus').textContent = `Gemini：${geminiConfigured ? '已設定' : '未設定'}；OpenAI：${openaiConfigured ? '已設定' : '未設定'}`;
@@ -1021,6 +1022,7 @@ async function stop() {
     await Promise.allSettled([gemini.end(),geminiSecond?.end(),geminiThird?.end()]);
     geminiSecond=null;finishLiveRecord(false,true);geminiThird=null;finishLiveRecord(false,3);
     gemini = null; pcm = null; finishLiveRecord(false);
+    if(precisionRecord){precisionRecord.state='error';precisionRecord.error='語音尚未完成辨識；請核對原聲。';precisionRecord=null;draw();}
     $('start').disabled = false;
   } else if (ctx && totalSamples) flushVAD();
 
@@ -1099,19 +1101,20 @@ $('start').onclick = async () => {
       throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
     }
 
-    if ($('engine').value === 'gemini') {
+    if (['gemini','precision'].includes($('engine').value)) {
       status('○ 正在連線 Gemini…');
-      gemini = new GeminiLiveClient({token,onEvent:handleGeminiEvent,onFailure:handleGeminiFailure});
-      try {await gemini.connect($('target').value);}
+      const precision=$('engine').value==='precision';
+      gemini = new GeminiLiveClient({token,onEvent:precision?handlePrecisionEvent:handleGeminiEvent,onFailure:handleGeminiFailure});
+      try {await gemini.connect($('target').value,precision?{mode:'transcribe',language:$('language').value}:{});}
       catch(e) {gemini.close();gemini=null;if($('fallback').checked && openaiConfigured && !openaiBlocked){$('engine').value='vad';fallbackReason=e.message;}else throw e;}
     }
-    if(gemini && $('dualTranslation').checked){
+    if(gemini && $('engine').value==='gemini' && $('dualTranslation').checked){
       $('secondStatus').textContent='正在連線第二語言…';
       geminiSecond=new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,true),onFailure:handleSecondFailure});
       try {await geminiSecond.connect($('secondTarget').value);$('secondStatus').textContent='第二語言已連線，等待音訊';}
       catch(e){geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
     }
-    if (gemini && $('dualTranslation').checked && $('tripleTranslation').checked) {
+    if (gemini && $('engine').value==='gemini' && $('dualTranslation').checked && $('tripleTranslation').checked) {
       $('thirdStatus').textContent='正在連線第三語言…';
       geminiThird = new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,3),onFailure:error=>handleThirdFailure(error)});
       try { await geminiThird.connect($('thirdTarget').value); $('thirdStatus').textContent='第三語言已連線，等待音訊'; }
@@ -1134,7 +1137,7 @@ $('start').onclick = async () => {
     totalSamples = 0;
     silenceSamples = 0;
     isSpeaking = false;
-    if($('engine').value === 'gemini' && !gemini)throw Error('Gemini 已中斷，請重新測試連線；尚未開始傳送音訊。');
+    if(['gemini','precision'].includes($('engine').value) && !gemini)throw Error('Gemini 已中斷，請重新測試連線；尚未開始傳送音訊。');
     running = true;
     startTime = Date.now();
 
@@ -1201,8 +1204,8 @@ $('start').onclick = async () => {
 
     $('start').textContent = '■ 停止聆聽';
     for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
-    $('badge').textContent = gemini ? 'Gemini 串流' : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
-    status(gemini ? '● Gemini 即時翻譯 · 語言自動偵測' : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
+    $('badge').textContent = gemini ? ($('engine').value==='precision'?'專業精準':'Gemini 串流') : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
+    status(gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯（約 10 分鐘需重新連線）':'● Gemini 即時翻譯 · 語言自動偵測') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
     try {
       wake = await navigator.wakeLock?.request('screen');
@@ -1359,6 +1362,17 @@ async function refineMedicalTurn(record) {
   draw();persist();$('medicalRefineStatus').textContent='術語校對完成；請對照原文核實。';
  }
 }
+function handlePrecisionEvent(event,data) {
+ if((event!=='interim' && event!=='final') || !data.text)return;
+ if(!precisionRecord)precisionRecord=newRecord({provider:'gemini-transcribe',state:'streaming'});
+ precisionRecord.text=toTaiwanTranscript(data.text,data.languageCode||precisionRecord.language);
+ updateStreamingRow(precisionRecord);
+ if(event==='final'){
+  const record=precisionRecord;precisionRecord=null;
+  if(record.text.trim())streamRecord(record,'translate-stream',{text:record.text,target:record.target,context:record.context,history:getRecentHistory()});
+  else {records=records.filter(r=>r!==record);draw();}
+ }
+}
 function handleGeminiEvent(event,data,secondary=false) {
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
  if((event!=='input' && event!=='output')||!data.text)return;
@@ -1405,6 +1419,7 @@ function handleSecondFailure(error){
  $('secondStatus').textContent='第二語言已中斷（第一語言繼續）：'+error.message;
 }
 function handleGeminiFailure(error) {
+ if(precisionRecord){precisionRecord.state='error';precisionRecord.error='語音辨識中斷，請核對原聲。';precisionRecord=null;draw();}
  const old=gemini;gemini=null;pcm=null;old?.close();finishLiveRecord(true);
  geminiSecond?.close();geminiSecond=null;finishLiveRecord(true,true);
  geminiThird?.close();geminiThird=null;finishLiveRecord(true,3);

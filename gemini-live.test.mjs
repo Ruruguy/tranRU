@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {translationSetup,openGeminiRelay} from './gemini-live.mjs';
 import {SSEParser,PCMChunks,GeminiLiveClient} from './public/gemini-client.js';
+import {transcriptionSetup} from './public/gemini-wire.js';
 test('default fetch preserves the browser global receiver (Illegal invocation regression)',async()=>{
  const original = globalThis.fetch;
  let calls = 0;
@@ -25,6 +26,15 @@ class FakeSocket extends EventTarget {
  close(){this.closed=true;}
  message(data){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(data)}));}
 }
+test('precision transcription sends vocabulary and distinguishes interim from final',()=>{
+ const setup=transcriptionSetup('zh').setup;
+ assert.equal(setup.model,'models/gemini-3.5-transcribe-live');
+ assert.deepEqual(setup.inputAudioTranscription.languageCodes,['cmn-Hans-CN']);
+ assert.ok(setup.inputAudioTranscription.customVocabulary.includes('意識不清'));
+ assert.ok(setup.inputAudioTranscription.customVocabulary.length<=100);
+ const events=[];const relay=openGeminiRelay({key:'test-key',mode:'transcribe',language:'zh',Socket:FakeSocket,emit:(event,data)=>events.push([event,data]),finish(){}});
+ try{const ws=FakeSocket.last;ws.dispatchEvent(new Event('open'));ws.message({setupComplete:{}});ws.message({serverContent:{interimInputTranscription:{text:'休'},inputTranscription:{text:'休克'}}});assert.deepEqual(events.map(x=>x[0]),['ready','interim','final']);assert.equal(events[2][1].text,'休克');}finally{relay.close();}
+});
 test('Gemini setup uses translation protocol, zh-Hant and no unsupported system prompt',()=>{
  const setup=translationSetup('Traditional Chinese (Taiwan)').setup;
  assert.equal(setup.generationConfig.translationConfig.targetLanguageCode,'zh-Hant');
