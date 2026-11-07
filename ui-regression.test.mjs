@@ -13,7 +13,7 @@ test('page module parses and required controls exist in valid UTF-8',()=>{
  assert.doesNotMatch(html, /name="tranru-mode"/);
 });
 test('precision mode updates interim text and translates only a finalized utterance',()=>{
- const requests=[];const records=[];const sandbox={precisionRecord:null,records,toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
+ const requests=[];const records=[];const sandbox={$:()=>({value:'precision'}),precisionRecord:null,records,toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
  vm.runInNewContext(app.slice(app.indexOf('function handlePrecisionEvent('),app.indexOf('function handleGeminiEvent(')),sandbox);
  sandbox.handlePrecisionEvent('interim',{text:'意识'});assert.equal(records[0].text,'意識');assert.equal(requests.length,0);
  sandbox.handlePrecisionEvent('interim',{text:'意识不清'});assert.equal(records[0].text,'意識不清');
@@ -80,4 +80,13 @@ test('live Chinese fragments convert after accumulation while Japanese input rem
  sandbox.handleGeminiEvent('input',{text:'我们今天',languageCode:'zh-CN'});sandbox.handleGeminiEvent('input',{text:'开会'});
  assert.equal(sandbox.records[0].text,'我們今天開會');sandbox.handleGeminiEvent('turn',{});
  sandbox.handleGeminiEvent('input',{text:'日本語の会議',languageCode:'ja-JP'});assert.equal(sandbox.records[1].text,'日本語の会議');
+});
+test('Azure and precision require the selected text provider before capturing audio',()=>{
+ const nodes={engine:{value:'azure'},translationProvider:{value:'gemini'}};
+ const context={$:id=>nodes[id],azureKey:'placeholder',azureRegion:'eastasia',geminiConfigured:false,openaiConfigured:true};
+ vm.createContext(context);vm.runInContext(app.slice(app.indexOf('const translationReady'),app.indexOf('function updateKeys'))+'\nthis.ready=canStart;',context);
+ assert.equal(context.ready(),false);nodes.translationProvider.value='openai';assert.equal(context.ready(),true);
+ context.azureKey='';assert.equal(context.ready(),false);
+ nodes.engine.value='precision';assert.equal(context.ready(),false);context.geminiConfigured=true;assert.equal(context.ready(),true);
+ nodes.translationProvider.value='openai';context.openaiConfigured=false;assert.equal(context.ready(),false);
 });

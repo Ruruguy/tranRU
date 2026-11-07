@@ -542,7 +542,7 @@ const handle = async (req, res) => {
 
     if (req.method !== 'GET') return send(405, {error: '不支援此方法'});
 
-    const paths = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/gemini-client.js': 'gemini-client.js', '/service-errors.js': 'service-errors.js', '/api-client.js': 'api-client.js', '/gemini-wire.js': 'gemini-wire.js', '/summary-core.js': 'summary-core.js', '/traditional.js':'traditional.js', '/opencc-cn2t.js':'opencc-cn2t.js', '/medical-glossary.js':'medical-glossary.js'};
+    const paths = {'/boot.js':'boot.js','/azure-client.js':'azure-client.js','/vendor/azure-speech-1.53.0.js':'vendor/azure-speech-1.53.0.js','/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/gemini-client.js': 'gemini-client.js', '/service-errors.js': 'service-errors.js', '/api-client.js': 'api-client.js', '/gemini-wire.js': 'gemini-wire.js', '/summary-core.js': 'summary-core.js', '/traditional.js':'traditional.js', '/opencc-cn2t.js':'opencc-cn2t.js', '/medical-glossary.js':'medical-glossary.js'};
     const file = paths[req.url];
     if (!file) return send(404, {error: '找不到檔案'});
 
