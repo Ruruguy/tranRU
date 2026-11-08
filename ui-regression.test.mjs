@@ -55,12 +55,12 @@ test('three live streams link delayed subtitle turns to the matching original',(
  assert.equal(sandbox.records.filter(r=>r.languageSlot===3)[1].parentId,sandbox.records.find(r=>r.text==='second').id);
 });
 test('tab sharing is requested synchronously and tracks close if Gemini fails to connect',async()=>{
- const ids=['start','source','engine','autoService','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
+ const ids=['start','source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
  const nodes=Object.fromEntries(ids.map(id=>[id,{value:'',checked:false,style:{},disabled:false}]));
  Object.assign(nodes.source,{value:'tab'});Object.assign(nodes.engine,{value:'gemini'});Object.assign(nodes.language,{value:'en'});Object.assign(nodes.target,{value:'English'});
  let active=true,stopped=false,message='';queueMicrotask(()=>{active=false;});
  const media={getAudioTracks:()=>[{}],getTracks:()=>[{stop(){stopped=true;}}]};
- const sandbox={navigator:{mediaDevices:{getDisplayMedia(){assert.equal(active,true,'screen capture must be requested while the click is active');return Promise.resolve(media);}}},$:id=>nodes[id],status:s=>message=s,canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(){throw Error('connection failed')}close(){}},Array,Error};
+ const sandbox={lectureAutoMode:()=>false,syncLectureAuto(){},navigator:{mediaDevices:{getDisplayMedia(){assert.equal(active,true,'screen capture must be requested while the click is active');return Promise.resolve(media);}}},$:id=>nodes[id],status:s=>message=s,canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(){throw Error('connection failed')}close(){}},Array,Error};
  vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
  await nodes.start.onclick();assert.equal(stopped,true);assert.match(message,/connection failed/);
 });
@@ -112,4 +112,13 @@ test('manual text translation accepts Gemini without requiring an OpenAI key',()
  const sandbox={$:id=>nodes[id],translationReady:()=>true,newRecord:({text})=>({text,target:'English'}),getRecentHistory:()=>[],streamRecord:(r,endpoint)=>sent={r,endpoint}};
  vm.runInNewContext(app.slice(app.indexOf("if ($('translate'))"),app.indexOf('// Demo Subtitles')),sandbox);
  nodes.translate.onclick();assert.equal(sent.endpoint,'translate-stream');assert.equal(sent.r.text,'休克');
+});
+test('automatic lecture uses one multilingual transcription stream for all selected columns',async()=>{
+ const ids=['start','source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
+ const nodes=Object.fromEntries(ids.map(id=>[id,{value:'',checked:false,style:{},disabled:false}]));
+ nodes.engine.value='gemini';nodes.source.value='mic';nodes.language.value='zh';nodes.target.value='Traditional Chinese (Taiwan)';nodes.secondTarget.value='English';nodes.thirdTarget.value='Japanese';nodes.dualTranslation.checked=true;nodes.tripleTranslation.checked=true;
+ const connections=[];let stopped=false;
+ const sandbox={lectureAutoMode:()=>true,syncLectureAuto(){},navigator:{mediaDevices:{getUserMedia:async()=>({getAudioTracks:()=>[{}],getTracks:()=>[{stop(){stopped=true;}}]})}},window:{AudioContext:class{async resume(){throw Error('test capture boundary');}async close(){}}},$:id=>nodes[id],status(){},canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handlePrecisionEvent(){},handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(target,options){connections.push({target,options});}close(){}}};
+ vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
+ await nodes.start.onclick();assert.equal(connections.length,1);assert.equal(connections[0].options.mode,'transcribe');assert.equal(connections[0].options.language,'auto');assert.equal(stopped,true);
 });

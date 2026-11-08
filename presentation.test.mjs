@@ -36,3 +36,18 @@ test('each pane independently scrolls to its own end on updates and resize',()=>
   renderPresentation(container,lanes);assert.equal(textBody.children[0],paragraph,'unchanged lane DOM retained');
  }finally{globalThis.document=old;}
 });
+test('display order follows selected languages instead of original generation slots',()=>{
+ const records=[{id:'a',text:'原文',target:'Traditional Chinese (Taiwan)',translation:'中文',state:'done'},{secondary:true,parentId:'a',target:'English',translation:'English',state:'done'},{secondary:true,parentId:'a',languageSlot:3,target:'Japanese',translation:'日本語',state:'done'}];
+ const lanes=presentationLanes(records,{dual:true,triple:true,targets:['Japanese','Traditional Chinese (Taiwan)','English']});
+ assert.deepEqual(lanes.slice(1).map(lane=>lane.items[0].text),['日本語','中文','English']);
+ const missing=presentationLanes(records,{targets:['Bengali']});assert.equal(missing[1].items.length,0);
+});
+test('normal transcript renders reordered streaming translations under the correct headings',async()=>{
+ const {readFileSync}=await import('node:fs');const vm=await import('node:vm');const {indexTranslations}=await import('./public/presentation.js');
+ class Element{constructor(){this.children=[];this.classList={add(){},contains:()=>false};}append(...x){this.children.push(...x);}replaceChildren(){this.children=[];}}
+ const nodes={rows:new Element(),dualTranslation:{checked:true},tripleTranslation:{checked:true},target:{value:'Japanese'},secondTarget:{value:'English'},thirdTarget:{value:'Traditional Chinese (Taiwan)'},count:{},autoscroll:{checked:true}};
+ const records=[{id:'a',text:'原文',target:'Traditional Chinese (Taiwan)',translation:'中文',state:'done'},{secondary:true,parentId:'a',target:'English',translation:'English',state:'done'},{secondary:true,parentId:'a',languageSlot:3,target:'Japanese',translation:'日本語',state:'streaming'}];
+ const sandbox={records,indexTranslations,$:id=>nodes[id],refreshPresentation(){},document:{body:new Element(),createElement:()=>new Element(),createTextNode:text=>({textContent:text})}};
+ const app=readFileSync('public/app.js','utf8');vm.runInNewContext(app.slice(app.indexOf('function draw()'),app.indexOf('function updateStreamingRow(')),sandbox);sandbox.draw();
+ assert.deepEqual(nodes.rows.children[0].children.slice(1).map(cell=>cell.textContent),['日本語','English','中文']);
+});
