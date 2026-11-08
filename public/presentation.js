@@ -8,9 +8,9 @@ export function indexTranslations(records) {
  return (parent,target)=>parent.target===target?parent:byParent.get(JSON.stringify([parent.id,target]))||byId.get(JSON.stringify([parent.secondId,target]))||byTime.get(JSON.stringify([parent.sessionId,parent.time,target]))||null;
 }
 
-// Presentation follows each language independently; the full transcript stays
-// in records and in the normal view. Late translations keep their source order.
-export function presentationLanes(records, {dual=false,triple=false,labels=[],targets=[]}={}) {
+// Continuous lecture columns retain all translations in source order.
+// The default bounded source/translation layout remains for legacy callers.
+export function presentationLanes(records, {dual=false,triple=false,labels=[],targets=[],continuous=false}={}) {
  const findTranslation=indexTranslations(records);
  const primary=records.filter(r=>!r.secondary && r.target!=='連線狀態');
  const children=new Map(),legacyIds=new Map(),legacyTimes=new Map();
@@ -19,7 +19,7 @@ export function presentationLanes(records, {dual=false,triple=false,labels=[],ta
   else if(r.languageSlot!==3){legacyIds.set(r.id,r);const key=JSON.stringify([r.sessionId,r.time]);if(!legacyTimes.has(key))legacyTimes.set(key,r);}
  }
  const laneCount=triple&&dual?4:dual?3:2;
- return Array.from({length:laneCount},(_,slot)=>{
+ const lanes=Array.from({length:laneCount},(_,slot)=>{
   const items=[];
   let state='等待字幕…';
   for(const r of primary){
@@ -28,12 +28,14 @@ export function presentationLanes(records, {dual=false,triple=false,labels=[],ta
    if(text)items.push({id:r.id,time:r.time,text,error:slot>0&&item?.state==='error'?item.error||'翻譯中斷':''});
    state=item?.state==='error'?(item.error||'翻譯中斷，請核對原文'):!text?'等待字幕…':item?.state==='streaming'?'即時更新中':'最新字幕';
   }
-  return {label:labels[slot]||['講者原文','第一語言','第二語言','第三語言'][slot],items:items.slice(-3),state};
+  return {label:labels[slot]||['講者原文','第一語言','第二語言','第三語言'][slot],items:continuous?items:items.slice(-3),state};
  });
+ return continuous?lanes.slice(1):lanes;
 }
 
-export function renderPresentation(container,lanes,{triple=false}={}) {
+export function renderPresentation(container,lanes,{triple=false,continuous=false}={}) {
  container.classList.toggle('presentation-triple',triple);
+ container.classList.toggle('continuous-languages',continuous);
  if(container.children.length!==lanes.length){
   container.replaceChildren();
   for(const lane of lanes){
@@ -47,9 +49,14 @@ export function renderPresentation(container,lanes,{triple=false}={}) {
  lanes.forEach((lane,index)=>{
   const [heading,body,state]=container.children[index].children;
   heading.textContent=lane.label;body.setAttribute('aria-label',lane.label+'字幕');state.textContent=lane.state;
-  const signature=JSON.stringify(lane.items);
+  const signature=JSON.stringify([continuous,lane.items]);
   if(body.dataset.content!==signature){
-   body.dataset.content=signature;body.replaceChildren();
+   body.dataset.content=signature;
+   if(continuous){
+    if(!body.firstChild){const text=document.createElement('p');text.className='presentation-continuous';body.append(text);}
+    body.firstChild.textContent=lane.items.map(item=>item.text+(item.error?' ［'+item.error+'］':'')).join('\n');
+   }else{
+   body.replaceChildren();
    for(const item of lane.items){
     const block=document.createElement('div');block.className='presentation-sentence';
     const time=document.createElement('time');time.textContent=item.time||'';
@@ -57,6 +64,7 @@ export function renderPresentation(container,lanes,{triple=false}={}) {
     block.append(time,text);
     if(item.error){const warning=document.createElement('small');warning.textContent=item.error;block.append(warning);}
     body.append(block);
+   }
    }
   }
   // No smooth animation: repeated streaming updates must not lag behind.

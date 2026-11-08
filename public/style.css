@@ -1272,3 +1272,17 @@ body.presenting .presentation-live.presentation-triple { grid-template-rows:minm
 .presentation-sentence small { font-size:13px; color:#ffc78a; }
 .presentation-state { flex:none; font-size:11px; padding:6px 16px; color:var(--text-smoke); max-height:3em; overflow:auto; }
 body.presenting .presentation-status { display:block; margin:0; padding:8px 16px; font-size:12px; height:38px; overflow:auto; box-sizing:border-box; color:var(--text-pale-mist); }
+
+/* Continuous lecture subtitles: one independently scrolling column per language. */
+#lectureView #panelHead { display:none; }
+#lectureView .presentation-live.has-subtitles ~ #rows { display:none; }
+#lectureView .presentation-live.continuous-languages {
+ display:grid; grid-template-columns:repeat(1,minmax(0,1fr));
+ grid-template-rows:minmax(0,1fr); height:clamp(320px,65dvh,900px); min-height:0;
+}
+#lectureView .presentation-live.continuous-languages:has(> :nth-child(2)) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#lectureView .presentation-live.continuous-languages:has(> :nth-child(3)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
+#lectureView .continuous-languages > :first-child { grid-column:auto; }
+#lectureView .presentation-live.continuous-languages:not(.has-subtitles) { display:none; }
+body.presenting #lectureView .presentation-live.continuous-languages { display:grid; height:calc(100dvh - 86px); }
+.presentation-continuous { margin:0; font-size:var(--subtitle); line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
