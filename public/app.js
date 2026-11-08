@@ -4,7 +4,7 @@ import {ContinuousGeminiClient as GeminiLiveClient, PCMChunks, SSEParser} from '
 import {selectSummaryRecords} from './summary-core.js';
 import {toTaiwanTranscript, isTraditionalChineseTarget} from './traditional.js';
 import {findMedicalTerms, medicalContext} from './medical-glossary.js';
-import {presentationLanes,renderPresentation,indexTranslations} from './presentation.js';
+import {presentationLanes,renderPresentation,indexTranslations,sourceForTarget} from './presentation.js';
 import {AzureSpeechClient, validateAzureConfig} from './azure-client.js';
 let azureKey = '', azureRegion = '';
 const $ = id => document.getElementById(id);
@@ -17,6 +17,7 @@ let gemini = null, pcm = null, liveRecord = null;
 let geminiSecond = null, secondLiveRecord = null;
 let geminiThird = null, thirdLiveRecord = null;
 let precisionRecord = null;
+const interimPreviews = new WeakMap();
 let liveBatch = '', liveTurnCounts = [0, 0, 0];
 const translationReady = () => $('translationProvider').value === 'gemini' ? geminiConfigured : $('translationProvider').value === 'openai' ? openaiConfigured : (geminiConfigured || openaiConfigured);
 const lectureAutoMode = () => !!$('lectureAuto')?.checked;
@@ -392,7 +393,7 @@ function refreshPresentation() {
   container.classList.toggle('has-subtitles',records.length>0);
   const dual=$('dualTranslation').checked, triple=dual&&$('tripleTranslation').checked;
   const label=id=>$(id).selectedOptions[0]?.textContent||$(id).value;
-  renderPresentation(container,presentationLanes(records,{dual,triple,targets:[$('target').value,$('secondTarget').value,$('thirdTarget').value],labels:['講者原文',label('target'),label('secondTarget'),label('thirdTarget')],continuous:true}),{triple,continuous:true});
+  renderPresentation(container,presentationLanes(previewDisplayRecords(),{dual,triple,targets:[$('target').value,$('secondTarget').value,$('thirdTarget').value],labels:['講者原文',label('target'),label('secondTarget'),label('thirdTarget')],continuous:true,includeSpeaker:true}),{triple,continuous:true});
 }
 window.addEventListener('resize',()=>requestAnimationFrame(refreshPresentation));
 
@@ -438,7 +439,7 @@ function draw() {
 
     const row = document.createElement('div');
     const isStreaming = [r,first,sec,third].some(item=>item && ['streaming','pending'].includes(item.state));
-    row.className = (isTriple ? 'row triple-layout' : isDual ? 'row row-dual-3col' : 'row') + (isStreaming ? ' live-active' : '');
+    row.className = (isTriple ? 'row triple-layout' : isDual ? 'row dual-3col' : 'row') + (isStreaming ? ' live-active' : '');
     row.id = 'row-' + r.id;
 
     // 1st Column: 講者原文
@@ -542,7 +543,7 @@ function updateStreamingRow(record) {
     $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.ja?' · '+t.ja:''}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}${t.note?' ［'+t.note+'］':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
   }
   if(document.body.classList.contains('presenting') || ($('presentationLive') && records.length)){if(typeof updatePiP==='function')updatePiP();return;}
-  if (record.languageSlot === 3 || $('tripleTranslation').checked || records.some(r=>r.target && r.target!==$(r.secondary?(r.languageSlot===3?'thirdTarget':'secondTarget'):'target').value)) { draw(); return; }
+  if (records.some(r=>r.target && r.target!==$(r.secondary?(r.languageSlot===3?'thirdTarget':'secondTarget'):'target').value)) { draw(); return; }
   let row = null;
   const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
 
@@ -559,22 +560,24 @@ function updateStreamingRow(record) {
       return;
     }
     const cells = row.querySelectorAll('.cell');
-    if (cells.length >= 3) {
+    const targetCellIdx = record.languageSlot === 3 ? 3 : 2;
+    if (cells.length > targetCellIdx) {
+      const cell = cells[targetCellIdx];
       if (record.state === 'streaming') {
-        cells[2].textContent = record.translation || '';
+        cell.textContent = record.translation || '';
         const cursor = document.createElement('span');
         cursor.className = 'streaming-cursor';
-        cells[2].append(cursor);
+        cell.append(cursor);
         row.classList.add('live-active');
       } else if (record.state === 'done') {
-        cells[2].textContent = record.translation || '';
+        cell.textContent = record.translation || '';
         const primary = records.find(r => !r.secondary && r.id === (record.parentId || row.id.replace('row-', '')));
         if (!primary || primary.state === 'done' || primary.state === 'error') {
           row.classList.remove('live-active');
         }
       } else if (record.state === 'error') {
-        cells[2].classList.add('failed');
-        cells[2].textContent = (record.translation?record.translation+'\n':'')+(record.error || '第二語言失敗');
+        cell.classList.add('failed');
+        cell.textContent = (record.translation?record.translation+'\n':'')+(record.error || (record.languageSlot === 3 ? '第三語言失敗' : '第二語言失敗'));
         const primary = records.find(r => !r.secondary && r.id === (record.parentId || row.id.replace('row-', '')));
         if (!primary || primary.state === 'done' || primary.state === 'error') {
           row.classList.remove('live-active');
@@ -625,7 +628,7 @@ function updateStreamingRow(record) {
 
       // Translation cell 2 if exists
       if (cells.length >= 3) {
-        const sec = records.find(s => s.secondary && s.parentId === record.id);
+        const sec = records.find(s => s.secondary && s.parentId === record.id && s.languageSlot !== 3);
         if (sec) {
           if (sec.state === 'streaming') {
             cells[2].textContent = sec.translation || '';
@@ -637,6 +640,24 @@ function updateStreamingRow(record) {
           } else if (sec.state === 'error') {
             cells[2].classList.add('failed');
             cells[2].textContent = sec.error || '第二語言失敗';
+          }
+        }
+      }
+
+      // Translation cell 3 if exists
+      if (cells.length >= 4) {
+        const tri = records.find(s => s.secondary && s.parentId === record.id && s.languageSlot === 3);
+        if (tri) {
+          if (tri.state === 'streaming') {
+            cells[3].textContent = tri.translation || '';
+            const cursor = document.createElement('span');
+            cursor.className = 'streaming-cursor';
+            cells[3].append(cursor);
+          } else if (tri.state === 'done') {
+            cells[3].textContent = tri.translation || '';
+          } else if (tri.state === 'error') {
+            cells[3].classList.add('failed');
+            cells[3].textContent = tri.error || '第三語言失敗';
           }
         }
       }
@@ -1027,28 +1048,28 @@ async function translateFreeRecord(record) {
   record.translation = '';
   record.state = 'streaming';
   updateStreamingRow(record);
+  if (!record.secondary && record.secondTarget && record.text.trim() && !record.secondRequested) {
+    record.secondRequested = true;
+    const second = newRecord({
+      secondary: true,
+      sessionId: record.sessionId,
+      parentId: record.id,
+      text: record.text,
+      target: record.secondTarget,
+      secondTarget: null
+    });
+    translateFreeRecord(second);
+  }
+  if (!record.secondary && record.thirdTarget && record.text.trim() && !record.thirdRequested) {
+    record.thirdRequested = true;
+    const third = newRecord({secondary:true,languageSlot:3,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.thirdTarget,secondTarget:null,thirdTarget:null});
+    translateFreeRecord(third);
+  }
   try {
     const translation = await translateFree(record.text, $('language').value, record.target);
     record.translation = isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(translation,'zh') : translation;
     record.state = 'done';
     updateStreamingRow(record);
-    if (!record.secondary && record.secondTarget && record.text.trim() && !record.secondRequested) {
-      record.secondRequested = true;
-      const second = newRecord({
-        secondary: true,
-        sessionId: record.sessionId,
-        parentId: record.id,
-        text: record.text,
-        target: record.secondTarget,
-        secondTarget: null
-      });
-      translateFreeRecord(second);
-    }
-    if (!record.secondary && record.thirdTarget && record.text.trim() && !record.thirdRequested) {
-      record.thirdRequested = true;
-      const third = newRecord({secondary:true,languageSlot:3,sessionId:record.sessionId,parentId:record.id,text:record.text,target:record.thirdTarget,secondTarget:null,thirdTarget:null});
-      translateFreeRecord(third);
-    }
     persist();
   } catch (err) {
     record.state = 'error';
@@ -1062,6 +1083,7 @@ async function translateFreeRecord(record) {
 // Stop Everything
 async function stop() {
   running = false;
+  if(precisionRecord)cancelInterimPreview(precisionRecord);
   session++;
   if (startTime) {
     elapsed += Date.now() - startTime;
@@ -1440,9 +1462,64 @@ function handleReconnectNotice(event,data,label) {
  }
  return true;
 }
+// Preview finalized-so-far speech without waiting for a long speaker pause.
+function previewDisplayRecords(){
+ const result=[],findTranslation=indexTranslations(records);
+ for(const record of records){
+  const preview=interimPreviews.get(record);
+  const first=preview?.items.find(item=>item.target===record.target);
+  result.push(first && !record.translation ? {...record,translation:first.translation,error:first.error,state:first.state} : record);
+  if(preview)for(const item of preview.items){
+   if(item.target!==record.target && !findTranslation(record,item.target)?.translation)result.push(item);
+  }
+ }
+ return result;
+}
+function cancelInterimPreview(record){
+ const preview=interimPreviews.get(record);if(!preview)return;
+ preview.closed=true;clearTimeout(preview.timer);preview.controller?.abort();
+}
+function scheduleInterimPreview(record){
+ if(!record.text?.trim())return;
+ let preview=interimPreviews.get(record);
+ if(!preview){preview={items:[],busy:false,closed:false,lastText:''};interimPreviews.set(record,preview);}
+ if(preview.closed||preview.timer||preview.busy||preview.lastText===record.text)return;
+ preview.timer=setTimeout(async()=>{
+  preview.timer=null;if(preview.closed)return;
+  preview.busy=true;preview.lastText=record.text;
+  const controller=new AbortController();preview.controller=controller;
+  const text=record.text;
+  const targets=[...new Set([record.target,record.secondTarget,record.thirdTarget].filter(Boolean))];
+  const previous=preview.items;
+  preview.items=targets.map(target=>({secondary:true,parentId:record.id,target,translation:previous.find(item=>item.target===target)?.translation||'',state:'streaming',time:record.time}));
+  refreshPresentation();
+  await Promise.all(preview.items.map(async item=>{
+   try{
+    const source=sourceForTarget(record,item.target);
+    if(source){item.translation=source;item.state='done';refreshPresentation();return;}
+    const response=await fetch('/api/translate-stream',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({text,target:item.target,context:record.context,history:[]}),signal:controller.signal});
+    if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error||'翻譯請求失敗 ('+response.status+')');}
+    const reader=response.body.getReader(),decoder=new TextDecoder();let raw='',complete=false;
+    const parser=new SSEParser((event,data)=>{
+     if(preview.closed)return;
+     if(event==='error')throw Error(data.error||'暫定翻譯失敗');
+     if(event==='delta')raw+=data.delta||'';
+     if(event==='done'){complete=true;item.state='done';if(data.translation!==undefined)raw=data.translation;}
+     item.translation=isTraditionalChineseTarget(item.target)?toTaiwanTranscript(raw,'zh'):raw;
+     refreshPresentation();
+    });
+    while(true){const {done,value}=await reader.read();if(done)break;parser.push(decoder.decode(value,{stream:true}));}
+    if(!complete&&!preview.closed)throw Error('翻譯串流中斷');
+   }catch(error){if(!preview.closed){item.state='error';item.error=error.message;refreshPresentation();}}
+  }));
+  preview.busy=false;
+  if(!preview.closed && record===precisionRecord)scheduleInterimPreview(record);
+ },700);
+}
 function handlePrecisionEvent(event,data) {
  if(handleReconnectNotice(event,data,'辨識'))return;
  if(event==='boundary'){
+  if(precisionRecord)cancelInterimPreview(precisionRecord);
   if(precisionRecord){precisionRecord.state='error';precisionRecord.error='重新連線前的辨識未完成；保留暫定原文供核對。';precisionRecord=null;draw();persist();}return;
  }
  if((event!=='interim' && event!=='final') || !data.text)return;
@@ -1450,7 +1527,9 @@ function handlePrecisionEvent(event,data) {
  if(data.languageCode)precisionRecord.language=data.languageCode;
  precisionRecord.text=toTaiwanTranscript(data.text,precisionRecord.language);
  updateStreamingRow(precisionRecord);
+ if(event==='interim')scheduleInterimPreview(precisionRecord);
  if(event==='final'){
+  cancelInterimPreview(precisionRecord);
   const record=precisionRecord;precisionRecord=null;
   if(record.text.trim())streamRecord(record,'translate-stream',{text:record.text,target:record.target,context:record.context,history:getRecentHistory()});
   else {records=records.filter(r=>r!==record);draw();}
@@ -1504,7 +1583,7 @@ function handleSecondFailure(error){
  $('secondStatus').textContent='第二語言已中斷（第一語言繼續）：'+error.message;
 }
 function handleGeminiFailure(error) {
- if(precisionRecord){precisionRecord.state='error';precisionRecord.error='語音辨識中斷，請核對原聲。';precisionRecord=null;draw();}
+ if(precisionRecord){cancelInterimPreview(precisionRecord);precisionRecord.state='error';precisionRecord.error='語音辨識中斷，請核對原聲。';precisionRecord=null;draw();}
  const old=gemini;gemini=null;pcm=null;old?.close();finishLiveRecord(true);
  geminiSecond?.close();geminiSecond=null;finishLiveRecord(true,true);
  geminiThird?.close();geminiThird=null;finishLiveRecord(true,3);
@@ -1711,15 +1790,41 @@ if ($('navLecture')) $('navLecture').onclick = () => switchMode('lecture');
 if ($('navConversation')) $('navConversation').onclick = () => switchMode('conversation');
 
 function updateConvLabels() {
-  if (!$('convLangA') || !$('convLangB')) return;
-  const optA = $('convLangA').selectedOptions[0];
-  const optB = $('convLangB').selectedOptions[0];
-  if ($('labelSpeakA') && optA) $('labelSpeakA').textContent = `說${optA.text.split('·')[0].trim()} (我方)`;
-  if ($('labelSpeakB') && optB) $('labelSpeakB').textContent = `說${optB.text.split('·')[0].trim()} (對方)`;
+  const count = $('convLangCount') ? $('convLangCount').value : '3';
+  if ($('wrapConvLangC')) $('wrapConvLangC').style.display = count >= '3' ? '' : 'none';
+  if ($('wrapConvLangD')) $('wrapConvLangD').style.display = count === '4' ? '' : 'none';
+  if ($('paneConv3')) $('paneConv3').style.display = count >= '3' ? '' : 'none';
+  if ($('paneConv4')) $('paneConv4').style.display = count === '4' ? '' : 'none';
+  if ($('convPanes')) {
+    $('convPanes').className = `conv-panes grid-${count}`;
+  }
+
+  const optA = $('convLangA')?.selectedOptions?.[0];
+  const optB = $('convLangB')?.selectedOptions?.[0];
+  const optC = $('convLangC')?.selectedOptions?.[0];
+  const optD = $('convLangD')?.selectedOptions?.[0];
+
+  const nameA = optA?.text?.split('·')?.[0]?.trim() || '中文';
+  const nameB = optB?.text?.split('·')?.[0]?.trim() || '英文';
+  const nameC = optC?.text?.split('·')?.[0]?.trim() || '日文';
+  const nameD = optD?.text?.split('·')?.[0]?.trim() || '韓文';
+
+  if ($('paneHead1') && optA) $('paneHead1').textContent = optA.text;
+  if ($('paneHead2') && optB) $('paneHead2').textContent = optB.text;
+  if ($('paneHead3') && optC) $('paneHead3').textContent = optC.text;
+  if ($('paneHead4') && optD) $('paneHead4').textContent = optD.text;
+
+  if ($('labelSpeakA')) $('labelSpeakA').textContent = `說${nameA} (第 1 種)`;
+  if ($('labelSpeakB')) $('labelSpeakB').textContent = `說${nameB} (第 2 種)`;
+  if ($('labelSpeakC')) $('labelSpeakC').textContent = `說${nameC} (第 3 種)`;
+  if ($('labelSpeakD')) $('labelSpeakD').textContent = `說${nameD} (第 4 種)`;
 }
 
+if ($('convLangCount')) $('convLangCount').onchange = updateConvLabels;
 if ($('convLangA')) $('convLangA').onchange = updateConvLabels;
 if ($('convLangB')) $('convLangB').onchange = updateConvLabels;
+if ($('convLangC')) $('convLangC').onchange = updateConvLabels;
+if ($('convLangD')) $('convLangD').onchange = updateConvLabels;
 if ($('convSwapLangs')) {
   $('convSwapLangs').onclick = () => {
     const tempVal = $('convLangA').value;
@@ -1766,40 +1871,69 @@ function getConversationHistory() {
 
 function drawConvFeed() {
   const feed = $('convFeed');
-  if (!feed) return;
-  if (!convRecords.length) {
-    feed.innerHTML = `
-      <div class="conv-empty">
-        <div class="sound">💬</div>
-        <h2>隨時開始自然雙向對話</h2>
-        <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
-      </div>
-    `;
-    if ($('convCount')) $('convCount').textContent = '0 則對話';
-    return;
+  if (feed) {
+    if (!convRecords.length) {
+      feed.innerHTML = `
+        <div class="conv-empty">
+          <div class="sound">💬</div>
+          <h2>隨時開始自然雙向對話</h2>
+          <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+        </div>
+      `;
+    } else {
+      feed.innerHTML = convRecords.map(r => {
+        const isA = r.speaker === 'A';
+        const speakerName = isA ? '我方' : '對方';
+        return `
+          <div class="conv-bubble ${isA ? 'conv-bubble-a' : 'conv-bubble-b'}" id="conv-bubble-${r.id}">
+            <div class="conv-bubble-meta">
+              <span class="conv-bubble-speaker">${speakerName} · ${r.time}</span>
+              ${r.translation && r.ttsLangCode !== 'tvl' ? `<button class="conv-tts-btn" data-record="${r.id}" title="朗讀譯文">🔊 朗讀</button>` : ''}
+            </div>
+            <div class="conv-original">${escapeHtml(r.text || r.interim || '正在辨識語音…')}</div>
+            <div class="conv-translation">${escapeHtml(r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''))}</div>
+          </div>
+        `;
+      }).join('');
+
+      for(const button of feed.querySelectorAll('.conv-tts-btn'))button.onclick=()=>{
+        const r=convRecords.find(record=>record.id===button.dataset.record);
+        if(r)speakTTS(r.translation,r.ttsLangCode);
+      };
+      feed.scrollTop = feed.scrollHeight;
+    }
   }
 
-  feed.innerHTML = convRecords.map(r => {
-    const isA = r.speaker === 'A';
-    const speakerName = isA ? '我方' : '對方';
-    return `
-      <div class="conv-bubble ${isA ? 'conv-bubble-a' : 'conv-bubble-b'}" id="conv-bubble-${r.id}">
-        <div class="conv-bubble-meta">
-          <span class="conv-bubble-speaker">${speakerName} · ${r.time}</span>
-          ${r.translation && r.ttsLangCode !== 'tvl' ? `<button class="conv-tts-btn" data-record="${r.id}" title="朗讀譯文">🔊 朗讀</button>` : ''}
+  // 同步更新手繪佈局卡片 (paneBody1 ~ paneBody4)
+  for (let i = 1; i <= 4; i++) {
+    const pBody = $('paneBody' + i);
+    if (!pBody) continue;
+    const liveEl = $('paneLive' + i);
+    if (!convRecords.length) {
+      pBody.innerHTML = '<div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>';
+      if (liveEl) pBody.append(liveEl);
+      continue;
+    }
+    const selectedTarget=$('convLang'+String.fromCharCode(64+i))?.selectedOptions[0]?.dataset.target;
+    const bubblesHtml = convRecords.map(r => {
+      const isMine = r.sourceTarget ? r.sourceTarget===selectedTarget : r.speaker===String.fromCharCode(64+i);
+      if(r.target && !isMine && r.target!==selectedTarget)return '';
+      if(isMine && r.sourceTarget && convRecords.find(x=>x.text===r.text&&x.time===r.time&&x.sourceTarget===r.sourceTarget)!==r)return '';
+      const textToShow = isMine ? (r.text || r.interim || '正在發言…') : (r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''));
+      if (!textToShow) return '';
+      return `
+        <div class="conv-bubble">
+          <div class="conv-bubble-meta">${isMine ? '發言' : '譯文'} · ${r.time}</div>
+          <div class="conv-bubble-text">${escapeHtml(textToShow)}</div>
         </div>
-        <div class="conv-original">${escapeHtml(r.text || r.interim || '正在辨識語音…')}</div>
-        <div class="conv-translation">${escapeHtml(r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''))}</div>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+    pBody.innerHTML = bubblesHtml;
+    if (liveEl) pBody.append(liveEl);
+    pBody.scrollTop = pBody.scrollHeight;
+  }
 
-  for(const button of feed.querySelectorAll('.conv-tts-btn'))button.onclick=()=>{
-    const r=convRecords.find(record=>record.id===button.dataset.record);
-    if(r)speakTTS(r.translation,r.ttsLangCode);
-  };
   if ($('convCount')) $('convCount').textContent = `${convRecords.length} 則對話`;
-  feed.scrollTop = feed.scrollHeight;
 }
 
 async function translateConvRecord(record, text, targetLangStr, ttsLangCode, sourceLangCode) {
@@ -1892,23 +2026,16 @@ function sendManualConv(speaker) {
   }
   input.value = '';
 
-  const isA = speaker === 'A';
-  const targetOpt = isA ? $('convLangB').selectedOptions[0] : $('convLangA').selectedOptions[0];
-  const sourceOpt = isA ? $('convLangA').selectedOptions[0] : $('convLangB').selectedOptions[0];
-  const targetStr = targetOpt.dataset.target || targetOpt.text;
-  const ttsCode = targetOpt.value;
-  const sourceCode = sourceOpt.value;
-
-  const rec = {
-    id: crypto.randomUUID(),
-    speaker,
-    time: formatTime(),
-    text,
-    translation: '',
-    state: 'pending'
-  };
-  convRecords.push(rec);
-  translateConvRecord(rec, text, targetStr, ttsCode, sourceCode);
+  const sourceOpt=$('convLang'+speaker)?.selectedOptions[0];
+  if(!sourceOpt)return;
+  const count=Number($('convLangCount')?.value||2);
+  for(let i=0;i<count;i++){
+    const letter=String.fromCharCode(65+i);if(letter===speaker)continue;
+    const dest=$('convLang'+letter)?.selectedOptions[0];if(!dest)continue;
+    const rec={id:crypto.randomUUID(),speaker,time:formatTime(),text,translation:'',state:'pending',sourceTarget:sourceOpt.dataset.target,target:dest.dataset.target};
+    convRecords.push(rec);
+    translateConvRecord(rec,text,dest.dataset.target,dest.value,sourceOpt.value);
+  }
 }
 
 if ($('convSendA')) $('convSendA').onclick = () => sendManualConv('A');
@@ -2046,12 +2173,32 @@ function stopConvSpeech() {
 
 if ($('btnSpeakA')) $('btnSpeakA').onclick = () => toggleTalk('A');
 if ($('btnSpeakB')) $('btnSpeakB').onclick = () => toggleTalk('B');
+if ($('btnSpeakC')) $('btnSpeakC').onclick = () => toggleTalk('C');
+if ($('btnSpeakD')) $('btnSpeakD').onclick = () => toggleTalk('D');
+
+for (let i = 1; i <= 4; i++) {
+  const btn = $('btnSend' + i);
+  const input = $('inputConv' + i);
+  if (btn && input) {
+    btn.onclick = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      if ($('convTextInput')) $('convTextInput').value = val;
+      input.value = '';
+      sendManualConv(String.fromCharCode(64+i));
+    };
+    input.onkeydown = e => {
+      if (e.key === 'Enter') btn.onclick();
+    };
+  }
+}
 
 if ($('convClear')) {
   $('convClear').onclick = () => {
     if (convRecords.length && !confirm('確定清除目前的對話紀錄？')) return;
-    stopConvSpeech();convEpoch++;window.speechSynthesis?.cancel();
+    stopConvLive();stopConvSpeech();convEpoch++;window.speechSynthesis?.cancel();
     convRecords = [];
+    resetConvLiveText();
     drawConvFeed();
     convStatus('○ 對話紀錄已清空');
   };
@@ -2059,12 +2206,12 @@ if ($('convClear')) {
 
 if ($('convExport')) {
   $('convExport').onclick = () => {
-    if (!convRecords.length) {
+    if (!convRecords.length && !['convLiveZh','convLiveEn','convLiveJa','convLiveKo'].some(id=>$(id)?.dataset.empty==='no' && $(id)?.textContent.trim())) {
       alert('尚無對話紀錄可匯出');
       return;
     }
     const text = '# 雙向即時口譯對話紀錄\n\n' +
-      convRecords.map(r => `### [${r.time}] ${r.speaker === 'A' ? '我方' : '對方'}\n- **原文**：${r.text}\n- **譯文**：${r.translation}\n`).join('\n');
+      convRecords.map(r => `### [${r.time}] ${r.speaker === 'A' ? '我方' : '對方'}\n- **原文**：${r.text}\n- **譯文**：${r.translation}\n`).join('\n') + '\n' + ['convLiveZh','convLiveEn','convLiveJa','convLiveKo'].map((id,i)=>$(id)?.dataset.empty==='no' ? '### '+($('paneHead'+(i+1))?.textContent||id)+'\n'+$(id).textContent : '').join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], {type: 'text/markdown;charset=utf-8'}));
     a.download = `conversation-${new Date().toISOString().slice(0, 10)}.md`;
@@ -2083,13 +2230,24 @@ let convLiveNodes=[], convLiveClients=[];
 const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
 function appendConvLive(id,text) {
  const el=$(id); if(!el)return;
- if(el.dataset.empty==='yes'){el.textContent='';el.dataset.empty='no';}
+ if(el.dataset && el.dataset.empty!=='no'){el.textContent='';el.dataset.empty='no';}
  el.textContent+=text;
  el.scrollTop=el.scrollHeight;
+ const index=['convLiveZh','convLiveEn','convLiveJa','convLiveKo'].indexOf(id);
+ if(index>=0){
+  const live=$('paneLive'+(index+1));
+  if(live){live.textContent=el.textContent;live.classList?.add('active');}
+  const body=$('paneBody'+(index+1));if(body)body.scrollTop=body.scrollHeight;
+ }
 }
 function resetConvLiveText(){
- for(const id of ['convLiveSource','convLiveZh','convLiveEn','convLiveJa']){$(id).textContent='';$(id).dataset.empty='no';}
- $('convDetected').textContent='等待語音';
+ for(const id of ['convLiveSource','convLiveZh','convLiveEn','convLiveJa','convLiveKo']){const el=$(id);if(el){el.textContent='';if(el.dataset)el.dataset.empty='no';}}
+ if($('convDetected')) $('convDetected').textContent='等待語音';
+ for(let i=1;i<=4;i++){
+  const b=$('paneBody'+i), l=$('paneLive'+i);
+  if(b)b.innerHTML='<div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>';
+  if(l){l.classList?.remove('active');l.textContent='';if(b)b.append(l);}
+ }
 }
 function stopConvLive(message='○ 已停止聆聽'){
  ++convLiveGeneration;convLiveRunning=false;
@@ -2097,35 +2255,88 @@ function stopConvLive(message='○ 已停止聆聽'){
  for(const node of convLiveNodes){try{node.disconnect();}catch{}}convLiveNodes=[];
  convLiveStream?.getTracks().forEach(track=>track.stop());convLiveStream=null;
  convLiveContext?.close().catch(()=>{});convLiveContext=null;
- $('convLiveStart').disabled=false;$('convLiveStart').textContent='● 開始三語即時聆聽';$('convLiveStatus').textContent=message;
+ $('convPanes')?.classList?.remove('listening');
+ for(let i=1;i<=4;i++){
+  const p=$('paneConv'+i), s=$('paneState'+i), l=$('paneLive'+i);
+  if(p)p.classList?.remove('speaking');
+  if(s)s.textContent='準備就緒';
+
+ }
+ for(const el of document.querySelectorAll?.('#conversationView select')||[])el.disabled=false;
+ if($('convSwapLangs'))$('convSwapLangs').disabled=false;
+ if($('convLiveStart')){
+  $('convLiveStart').disabled=false;
+  $('convLiveStart').textContent='● 開始自動對話聆聽';
+  $('convLiveStart').classList?.remove('recording');
+ }
+ if($('convLiveStatus')) $('convLiveStatus').textContent=message;
 }
 if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
  if(convLiveRunning){stopConvLive();return;}
- if(!geminiConfigured){$('dialog').showModal();$('convLiveStatus').textContent='請先設定 Gemini API 金鑰';return;}
+ if(!geminiConfigured){
+  $('dialog').showModal();
+  if($('convLiveStatus')) $('convLiveStatus').textContent='自動辨識多語對話需要 Gemini API 金鑰；免金鑰僅供指定語言的手動輸入';
+  return;
+ }
  stopConvSpeech();window.speechSynthesis?.cancel();
  const generation=++convLiveGeneration;
- $('convLiveStart').disabled=true;$('convLiveStatus').textContent='正在取得麥克風並連線三種語言…';
+ for(const el of document.querySelectorAll?.('#conversationView select')||[])el.disabled=true;
+ if($('convSwapLangs'))$('convSwapLangs').disabled=true;
+ $('convLiveStart').disabled=true;
+ if($('convLiveStatus')) $('convLiveStatus').textContent='正在取得麥克風授權並建立自動口譯…';
  try{
   const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
   if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
   convLiveStream=captured;
-  const clients=convLiveTargets.map(([target,id],index)=>new GeminiLiveClient({token,onEvent:(event,data)=>{
+
+  // 動態語言目標設定（相容 conversation-live.test.mjs 預設三語）
+  const dynamicTargets = (() => {
+   if (!$('convLangCount')) return convLiveTargets;
+   const count = parseInt($('convLangCount').value, 10) || 3;
+   const getTarget = (id, fb) => {
+    const el = $(id);
+    const opt = el?.selectedOptions?.[0];
+    return opt?.dataset?.target || opt?.value || fb;
+   };
+   const list = [
+    [getTarget('convLangA', 'Traditional Chinese (Taiwan)'), 'convLiveZh', 1],
+    [getTarget('convLangB', 'English'), 'convLiveEn', 2],
+   ];
+   if (count >= 3) list.push([getTarget('convLangC', 'Japanese'), 'convLiveJa', 3]);
+   if (count === 4) list.push([getTarget('convLangD', 'Korean'), 'convLiveKo', 4]);
+   return list;
+  })();
+
+  const activeTargets = dynamicTargets;
+  if(new Set(activeTargets.map(x=>x[0])).size!==activeTargets.length)throw Error('請為各欄選擇不同的語言');
+  const clients=activeTargets.map(([target,id,paneNum],index)=>new GeminiLiveClient({token,onEvent:(event,data)=>{
    if(generation!==convLiveGeneration)return;
+   const pane= paneNum || index+1;
    if(['reconnecting','reconnected','gap'].includes(event)){
-    const message=event==='reconnecting'?'正在自動重新連線，暫存收音中':event==='reconnected'?'已恢復連線':'音訊暫存不足或未送出，可能缺字';
-    $('convLiveStatus').textContent=target+'：'+message;
-    if(event==='gap')appendConvLive(id,'\n[連線中斷，這段可能缺字]\n');return;
+    if($('convLiveStatus'))$('convLiveStatus').textContent=target+'：'+(event==='reconnected'?'已恢復連線，字幕保留':event==='gap'?'音訊暫存不足，可能缺字':'正在自動重新連線');
+    if(event==='gap')appendConvLive(id,'\n[連線中斷，可能缺字]\n');
+    return;
    }
-   if(event==='boundary'){appendConvLive(id,'\n[連線已更換，上段末尾請核對原聲]\n');if(index===0)appendConvLive('convLiveSource','\n');return;}
-   if(event==='input'&&index===0&&data.text){
-    if(data.languageCode){const code=data.languageCode.toLowerCase();$('convDetected').textContent=code.startsWith('zh')?'中文':code.startsWith('en')?'英文':code.startsWith('ja')?'日文':data.languageCode;}
+   if(event==='input' && index===0 && data.text){
     appendConvLive('convLiveSource',toTaiwanTranscript(data.text,data.languageCode||''));
+    if(data.languageCode){
+     const code=data.languageCode.toLowerCase().split('-')[0];
+     if($('convDetected'))$('convDetected').textContent=({zh:'中文',en:'英文',ja:'日文'})[code]||data.languageCode;
+     activeTargets.forEach((entry,i)=>{
+      const selected=$('convLang'+String.fromCharCode(65+i));
+      const matches=selected?.value?.toLowerCase().split('-')[0]===code;
+      $('paneConv'+(i+1))?.classList?.toggle('speaking',matches);
+      if($('paneState'+(i+1)))$('paneState'+(i+1)).textContent=matches?'正在發言（依語言偵測）':'即時口譯中';
+     });
+    }
    }
-   if(event==='output'&&data.text)appendConvLive(id,index===0?toTaiwanTranscript(data.text,'zh'):data.text);
+   if(event==='output'&&data.text)appendConvLive(id,isTraditionalChineseTarget(target)?toTaiwanTranscript(data.text,'zh'):data.text);
    if(event==='turn'){appendConvLive(id,'\n');if(index===0)appendConvLive('convLiveSource','\n');}
+   if(event==='boundary')appendConvLive(id,'\n[連線已更換，上段末尾請核對原聲]\n');
   },onFailure:error=>{if(generation===convLiveGeneration)stopConvLive('即時翻譯連線中斷：'+error.message);}}));
+
   convLiveClients=clients;
-  await Promise.all(clients.map((client,index)=>client.connect(convLiveTargets[index][0])));
+  await Promise.all(clients.map((client,index)=>client.connect(activeTargets[index][0])));
   if(generation!==convLiveGeneration)return;
   const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
   await audioContext.resume();if(generation!==convLiveGeneration)return;
@@ -2133,10 +2344,21 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   convLiveNodes=[input,processor,sink];sink.gain.value=0;input.connect(processor);processor.connect(sink);sink.connect(audioContext.destination);
   processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;for(const chunk of chunks.push(e.inputBuffer.getChannelData(0)))for(const client of clients)client.send(chunk);};
   for(const track of captured.getAudioTracks())track.onended=()=>{if(generation===convLiveGeneration)stopConvLive('麥克風已停止');};
-  convLiveRunning=true;$('convLiveStart').disabled=false;$('convLiveStart').textContent='■ 停止聆聽';$('convLiveStatus').textContent='● 自動偵測語言，三語即時翻譯中';
+  convLiveRunning=true;
+  $('convPanes')?.classList?.add('listening');
+  for(let p=1; p<=activeTargets.length; p++){
+   const s = $('paneState' + p);
+   if(s) s.textContent = '🎙️ 全程收音中 · 請開口';
+  }
+  if($('convLiveStart')){
+   $('convLiveStart').disabled=false;
+   $('convLiveStart').textContent='■ 停止對話聆聽';
+   $('convLiveStart').classList?.add('recording');
+  }
+  if($('convLiveStatus')) $('convLiveStatus').textContent='● 全程自動收音中 · 雙方直接開口即可，系統將自動偵測發言語言並即時翻譯';
  }catch(error){if(generation===convLiveGeneration)stopConvLive('無法啟動：'+error.message);}
 };
-if($('convLiveClear'))$('convLiveClear').onclick=resetConvLiveText;
+if($('convLiveClear'))$('convLiveClear').onclick=()=>{convRecords=[];resetConvLiveText();drawConvFeed();};
 window.addEventListener('pagehide',()=>stopConvLive());
 
 // Firefighting, Rescue & EMS Glossary Management

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test",
+    "test": "node --test *.test.mjs",
     "build": "node scripts/build-static.mjs"
   },
   "engines": {

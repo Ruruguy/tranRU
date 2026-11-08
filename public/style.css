@@ -228,6 +228,46 @@ label {
   min-width: 125px;
 }
 
+.ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.ctrl-group label {
+  font-size: 11px;
+  color: var(--text-smoke);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.ctrl-group.ctrl-pill-group {
+  min-width: 135px;
+}
+
+.pill-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-pale-mist);
+  cursor: pointer;
+  user-select: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pill-check input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #7c3aed;
+}
+
 label.ctrl-dual {
   min-width: auto;
   flex-direction: row;
@@ -431,7 +471,8 @@ select:focus {
 #rows, #secondRows {
   height: 460px;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  overflow-anchor: auto;
+  scroll-behavior: auto;
 }
 
 .empty {
@@ -478,7 +519,9 @@ select:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background 0.15s ease;
+  border-left: 3px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
 }
 
 .row.row-dual-3col {
@@ -980,11 +1023,12 @@ body.focus .second-panel #secondRows{max-height:45vh}
 .conv-feed {
   height: 440px;
   overflow-y: auto;
+  overflow-anchor: auto;
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .conv-empty {
@@ -1247,7 +1291,10 @@ body.presenting #lectureView .statusbar,
 body.presenting #lectureView .lecture-actions,
 body.presenting #lectureView .medical-reference,
 body.presenting #lectureView .note,
-body.presenting #lectureView > details { display: none !important; }
+body.presenting #lectureView > details,
+body.presenting #conversationView > header,
+body.presenting #conversationView .controls,
+body.presenting #conversationView .statusbar { display: none !important; }
 body.presenting main { margin:0; width:100%; max-width:none; padding:12px; }
 body.presenting #lectureView .transcript-portal-wrap { margin:0; }
 body.presenting .presentation-live {
@@ -1259,7 +1306,8 @@ body.presenting .presentation-live.presentation-triple { grid-template-rows:minm
 .presentation-triple > :first-child { grid-column:1 / -1; }
 .presentation-pane { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border:1px solid var(--border-ash); }
 .presentation-heading { flex:none; font-size:14px; margin:0; padding:10px 16px; color:var(--text-pale-mist); }
-.presentation-body { flex:1; min-height:0; overflow-y:auto; overflow-anchor:none; scroll-behavior:auto; padding:0 18px 12px; overflow-wrap:anywhere; }
+.presentation-body { flex:1; min-height:0; overflow-y:auto; overflow-anchor:auto; scroll-behavior:auto; padding:0 18px 64px; overflow-wrap:anywhere; }
+body.presenting .presentation-body { padding: 12px 24px 72px; }
 .presentation-sentence { font-size:var(--subtitle); line-height:1.65; white-space:pre-wrap; }
 .presentation-sentence + .presentation-sentence { margin-top:20px; }
 .presentation-sentence time { font-size:11px; color:var(--text-smoke); }
@@ -1268,16 +1316,459 @@ body.presenting .presentation-live.presentation-triple { grid-template-rows:minm
 .presentation-state { flex:none; font-size:11px; padding:6px 16px; color:var(--text-smoke); max-height:3em; overflow:auto; }
 body.presenting .presentation-status { display:block; margin:0; padding:8px 16px; font-size:12px; height:38px; overflow:auto; box-sizing:border-box; color:var(--text-pale-mist); }
 
-/* Continuous lecture subtitles: one independently scrolling column per language. */
-#lectureView #panelHead { display:none; }
-#lectureView .presentation-live.has-subtitles ~ #rows { display:none; }
-#lectureView .presentation-live.continuous-languages {
- display:grid; grid-template-columns:repeat(1,minmax(0,1fr));
- grid-template-rows:minmax(0,1fr); height:clamp(320px,65dvh,900px); min-height:0;
+/* 演講模式佈局：嚴格依手繪稿實作
+   - 2 種目標語言（圖 4）：3 欄並列 [ 講者講的文字 ] | [ 第一種 ] | [ 第二種 ]
+   - 3 種目標語言（圖 5）：上方橫幅 [ 講者講的文字 ]，下方 3 欄 [ 第一種 ] | [ 第二種 ] | [ 第三種 ] */
+.panel-head.dual-3col, .row.dual-3col {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-#lectureView .presentation-live.continuous-languages:has(> :nth-child(2)) { grid-template-columns:repeat(2,minmax(0,1fr)); }
-#lectureView .presentation-live.continuous-languages:has(> :nth-child(3)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
-#lectureView .continuous-languages > :first-child { grid-column:auto; }
-#lectureView .presentation-live.continuous-languages:not(.has-subtitles) { display:none; }
-body.presenting #lectureView .presentation-live.continuous-languages { display:grid; height:calc(100dvh - 86px); }
-.presentation-continuous { margin:0; font-size:var(--subtitle); line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+.panel-head.triple-layout, .row.triple-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.panel-head.triple-layout > :first-child, .row.triple-layout > :first-child {
+  grid-column: 1 / -1;
+}
+
+body.presenting .presentation-live {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  height: calc(100dvh - 86px);
+  min-height: 0;
+  gap: 12px;
+}
+
+/* 2 種目標語言：講者原文 + 2 種翻譯 = 3 欄並列 */
+body.presenting .presentation-live:has(> :nth-child(3)):not(.presentation-triple) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* 3 種目標語言：講者原文在上方整列，下方 3 欄並列 */
+body.presenting .presentation-live.presentation-triple,
+body.presenting .presentation-live:has(> :nth-child(4)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(120px, 1fr) minmax(240px, 2.5fr);
+}
+body.presenting .presentation-live.presentation-triple > :first-child,
+body.presenting .presentation-live:has(> :nth-child(4)) > :first-child {
+  grid-column: 1 / -1;
+}
+
+.presentation-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-ash);
+  border-radius: 14px;
+  background: rgba(10, 14, 22, 0.65);
+}
+
+.presentation-heading {
+  flex: none;
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 18px;
+  color: var(--text-pale-mist);
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-ash);
+}
+
+.presentation-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: auto;
+  scroll-behavior: auto;
+  padding: 12px 18px;
+  overflow-wrap: anywhere;
+}
+
+.presentation-sentence {
+  font-size: var(--subtitle);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.presentation-sentence + .presentation-sentence {
+  margin-top: 16px;
+}
+
+.presentation-sentence time {
+  font-size: 11px;
+  color: var(--text-smoke);
+}
+
+.presentation-sentence p {
+  margin: 3px 0 0;
+}
+
+.presentation-sentence small {
+  font-size: 13px;
+  color: #ffc78a;
+}
+
+.presentation-state {
+  flex: none;
+  font-size: 11px;
+  padding: 6px 18px;
+  color: var(--text-smoke);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.presentation-continuous {
+  margin: 0;
+  font-size: var(--subtitle);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   雙向溝通模式多語版面佈局 (嚴格符合手繪稿圖 1, 圖 2, 圖 3)
+   ============================================================ */
+.conv-panes {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  min-height: 480px;
+}
+
+/* 圖 2: 2 種語言 -> 2 欄並列 [設定第一種] | [設定第二種] */
+.conv-panes.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 圖 1: 3 種語言 -> 3 欄並列 [設定第一種] | [設定第二種] | [設定第三種] */
+.conv-panes.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 圖 3: 4 種語言 -> 2x2 網格 [設定第一種] [設定第二種] / [設定第三種] [設定第四種] */
+.conv-panes.grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto;
+}
+
+.conv-pane {
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 16, 26, 0.75);
+  border: 1px solid var(--border-ash);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.conv-pane:hover, .conv-pane.speaking {
+  border-color: rgba(167, 139, 250, 0.5);
+  box-shadow: 0 16px 40px rgba(124, 58, 237, 0.2);
+}
+
+.conv-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-ash);
+}
+
+.pane-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.conv-pane-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-ghost-white);
+  flex: 1;
+}
+
+.pane-state {
+  font-size: 11px;
+  color: var(--text-smoke);
+}
+
+.conv-pane-body {
+  flex: 1;
+  padding: 16px 16px 64px 16px;
+  overflow-y: auto;
+  overflow-anchor: auto;
+  scroll-behavior: auto;
+  min-height: 220px;
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conv-pane.speaking .pane-empty,
+.conv-pane-body:has(.pane-live-stream.active) .pane-empty,
+.conv-pane-body:has(.conv-bubble) .pane-empty {
+  display: none !important;
+}
+
+.pane-empty {
+  margin: auto;
+  font-size: 13px;
+  color: var(--text-smoke);
+  text-align: center;
+  padding: 24px;
+}
+
+/* 雙向溝通全螢幕：對話框拉到最長、字體放大、底部預留 1~2 行空間 */
+body.presenting #convPanes.conv-panes {
+  margin-top: 0;
+  height: calc(100dvh - 36px);
+  min-height: 0;
+  gap: 16px;
+}
+body.presenting .conv-pane {
+  height: 100%;
+  min-height: 0;
+}
+body.presenting .conv-pane-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none !important;
+  padding: 24px 24px 72px 24px;
+  gap: 18px;
+}
+body.presenting .conv-pane-head {
+  padding: 14px 22px;
+}
+body.presenting .conv-pane-head h3 {
+  font-size: 20px;
+}
+body.presenting .pane-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+body.presenting .pane-state {
+  font-size: 13px;
+}
+body.presenting .conv-bubble-text {
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.7;
+}
+body.presenting .conv-bubble-meta {
+  font-size: 13px;
+}
+body.presenting .pane-live-stream {
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.7;
+  padding: 16px 20px;
+}
+
+.conv-pane-foot {
+  padding: 12px 16px;
+  background: rgba(6, 8, 14, 0.85);
+  border-top: 1px solid var(--border-ash);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conv-pane-foot .btn-talk {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-ash);
+  color: var(--text-ghost-white);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.conv-pane-foot .btn-talk:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.conv-pane-foot .btn-talk.active {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+}
+
+.pane-quick-input {
+  display: flex;
+  gap: 6px;
+}
+
+.pane-quick-input input {
+  flex: 1;
+  font-size: 12px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-ash);
+  border-radius: 8px;
+  color: #ffffff;
+}
+
+.pane-quick-input button {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: rgba(167, 139, 250, 0.15);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  color: #c4b5fd;
+  cursor: pointer;
+}
+
+.conv-bubble {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.conv-bubble-meta {
+  font-size: 10px;
+  color: var(--text-smoke);
+  margin-bottom: 4px;
+}
+
+.conv-bubble-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-ghost-white);
+}
+
+.conv-bubble-trans {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c4b5fd;
+  margin-top: 4px;
+}
+
+/* 全程自動收音狀態指示與即時串流區域 */
+.pane-mic-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-ash);
+  font-size: 11px;
+  color: var(--text-smoke);
+  user-select: none;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.conv-panes.listening .live-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+  animation: pulseListen 2s infinite ease-in-out;
+}
+
+.conv-panes.listening .pane-mic-indicator {
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+@keyframes pulseListen {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 12px #38bdf8; }
+}
+
+.conv-pane.speaking {
+  border-color: #a78bfa !important;
+  box-shadow: 0 16px 40px rgba(124, 58, 237, 0.35) !important;
+}
+
+.conv-pane.speaking .live-dot {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: pulseSpeak 0.8s infinite alternate;
+}
+
+.conv-pane.speaking .pane-mic-indicator {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+@keyframes pulseSpeak {
+  from { transform: scale(1); opacity: 0.8; }
+  to { transform: scale(1.3); opacity: 1; box-shadow: 0 0 14px #ef4444; }
+}
+
+.pane-live-stream {
+  margin-top: 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  font-size: 15px;
+  line-height: 1.65;
+  color: #ffffff;
+  display: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pane-live-stream.active {
+  display: block;
+}
+
+.pane-live-stream .cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #a78bfa;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: blink 0.9s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Keep the same fixed, independently scrolling layout outside fullscreen. */
+#lectureView #panelHead {display:none;}
+#lectureView .presentation-live.has-subtitles ~ #rows {display:none;}
+#lectureView .presentation-live.has-subtitles {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr);height:65dvh;min-height:320px;gap:12px;}
+#lectureView .presentation-live.has-subtitles:has(> :nth-child(3)) {grid-template-columns:repeat(3,minmax(0,1fr));}
+#lectureView .presentation-live.has-subtitles.presentation-triple {grid-template-rows:minmax(0,1fr) minmax(0,2fr);}
+body.presenting #lectureView .presentation-live {height:calc(100dvh - 86px);min-height:0;}
+.presentation-body {overflow-anchor:none;}
+label:has(> input[type=checkbox]) {display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;}
+label > input[type=checkbox] {flex:0 0 auto;width:16px;min-width:16px;margin:0;}

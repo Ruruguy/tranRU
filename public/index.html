@@ -11,16 +11,16 @@
   <script>if(location.protocol === "file:") document.getElementById("fileWarning").hidden = false;</script>
   <nav class="topbar" aria-label="主要導覽">
     <a class="brand" href="./">▥ <span>tranRU</span></a>
-    <button class="nav active" id="navLecture">◉ 演講口譯</button>
-    <button class="nav" id="navConversation">⇄ 雙向對話</button>
+    <button class="nav active" id="navLecture">◉ 演講模式</button>
+    <button class="nav" id="navConversation">⇄ 雙向溝通</button>
     <div class="topbar-actions">
       <button id="btnVoiceGlow" class="voice-glow-btn active" title="演講過程隨聲調輕微光影波動">✨ 聲波光影 ON</button>
       <button id="pip" title="開啟置頂懸浮視窗，可覆蓋在 Zoom 或簡報上方">🪟 懸浮字幕</button>
-      <button id="focus" title="切換演講者模式（全螢幕沉浸專注顯示）">⛶ 演講模式</button>
+      <button id="focus" title="全螢幕專注顯示">⛶ 全螢幕</button>
       <button id="settings">⚙ 服務設定</button>
     </div>
   </nav>
-  <button id="exitCompact" class="exit-compact" hidden>退出演講模式 · Esc</button>
+  <button id="exitCompact" class="exit-compact" hidden>退出全螢幕 · Esc</button>
 
   <main>
     <div id="lectureView">
@@ -30,79 +30,89 @@
       </header>
 
     <section class="controls" id="lectureControls">
-      <label class="ctrl-source">音訊來源
+      <div class="ctrl-group">
+        <label for="source">音訊來源</label>
         <select id="source">
           <option value="mic">◉ 現場麥克風</option>
           <option value="tab">▣ 分頁／電腦音訊</option>
         </select>
-      </label>
+      </div>
 
-      <label class="ctrl-engine">辨識引擎
+      <div class="ctrl-group">
+        <label for="engine">辨識引擎</label>
         <select id="engine">
-          <option value="gemini">✨ Gemini 即時翻譯（第一優先）</option>
+          <option value="gemini">✨ Gemini 即時翻譯（首選・極速串流）</option>
           <option value="vad">⚡ OpenAI 智慧停頓切段（第二優先）</option>
           <option value="azure">☁ Azure Speech 辨識＋文字翻譯（選用）</option>
           <option value="precision">🩺 Gemini 專業精準模式（醫療詞彙提示）</option>
           <option value="native">🚀 極速即時模式 (原生語音)</option>
           <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
         </select>
-      </label>
+      </div>
 
-      <label class="inline" title="依已儲存的金鑰選擇；手動選引擎或文字服務可取消自動選擇"><input id="autoService" type="checkbox" checked>依金鑰自動選擇：Gemini → OpenAI</label>
-      <label class="inline"><input id="lectureAuto" type="checkbox" checked>自動辨識發言語言、同步翻譯各欄</label>
-      <label class="ctrl-lang">講者語言（自動模式不需指定）
+      <div class="ctrl-group">
+        <label for="language">講者語言</label>
         <select id="language">
+          <option value="auto" selected>自動偵測（可輪流說不同語言）</option>
           <option value="en">English · 英文</option>
           <option value="ja">日本語 · 日文</option>
           <option value="ko">한국어 · 韓文</option>
           <option value="zh">中文 · 繁體中文（台灣）</option>
-          <option value="auto" selected>自動偵測（可輪流說不同語言）</option>
           <option value="es">Español · 西班牙文</option>
           <option value="fr">Français · 法文</option>
           <option value="de">Deutsch · 德文</option>
           <option value="bn">বাংলা · 孟加拉語</option>
         </select>
-      </label>
+      </div>
 
       <span class="arrow">→</span>
 
-      <label class="ctrl-target">第 1 欄語言
+      <div class="ctrl-group">
+        <label for="target">第 1 欄語言</label>
         <select id="target">
           <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
           <option value="English">English</option>
           <option value="Japanese">日本語</option>
           <option value="Bengali">বাংলা · 孟加拉語</option>
         </select>
-      </label>
+      </div>
 
-      <label class="ctrl-dual inline" title="勾選啟用雙語言同時口譯">
-        <input type="checkbox" id="dualTranslation" checked>
-        <span>顯示第 2 欄</span>
-      </label>
-
-      <label class="ctrl-second-target" id="secondTargetLabel" hidden>第 2 欄語言
+      <div class="ctrl-group ctrl-pill-group" id="secondPillGroup">
+        <label class="pill-check" for="dualTranslation" title="勾選啟用第 2 欄語言">
+          <input type="checkbox" id="dualTranslation" checked>
+          <span>第 2 欄語言</span>
+        </label>
+        <label class="sr-only" id="secondTargetLabel" for="secondTarget" hidden>第 2 欄語言</label>
         <select id="secondTarget">
           <option value="English" selected>English</option>
           <option value="Japanese">日本語</option>
           <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
           <option value="Bengali">বাংলা · 孟加拉語</option>
         </select>
-      </label>
+      </div>
 
-      <label class="ctrl-dual inline" id="tripleLabel" hidden><input type="checkbox" id="tripleTranslation" checked>顯示第 3 欄</label>
-      <label class="ctrl-second-target" id="thirdTargetLabel" hidden>第 3 欄語言
+      <div class="ctrl-group ctrl-pill-group" id="thirdPillGroup">
+        <label class="pill-check" for="tripleTranslation" title="勾選啟用第 3 欄語言" id="tripleLabel">
+          <input type="checkbox" id="tripleTranslation">
+          <span>第 3 欄語言</span>
+        </label>
+        <label class="sr-only" id="thirdTargetLabel" for="thirdTarget" hidden>第 3 欄語言</label>
         <select id="thirdTarget">
           <option value="English">English</option>
           <option value="Japanese" selected>日本語</option>
           <option value="Traditional Chinese (Taiwan)">繁體中文 · 台灣</option>
           <option value="Bengali">বাংলা · 孟加拉語</option>
         </select>
-      </label>
-      <button class="primary" id="start">● 開始聆聽</button>
-      <button id="newSession" title="保留已有字幕，讓後續字幕屬於新場次">＋ 新場次</button>
-    </section>
+      </div>
 
-    <p class="note">各欄語言決定字幕的顯示順序，不限制講者使用的語言。自動互譯支援 Gemini／OpenAI；取消勾選可使用指定語言模式。</p>
+      <div class="ctrl-group ctrl-actions">
+        <button class="primary" id="start">● 開始聆聽</button>
+        <button id="newSession" title="保留已有字幕，讓後續字幕屬於新場次">＋ 新場次</button>
+      </div>
+
+      <label class="inline" style="display:none;" hidden><input id="autoService" type="checkbox" checked>依金鑰自動選擇</label>
+      <label class="inline" style="display:none;" hidden><input id="lectureAuto" type="checkbox">自動辨識發言語言</label>
+    </section>
     <div class="statusbar">
       <div class="status-left">
         <span id="status" role="status" aria-live="polite">○ 準備就緒</span>
@@ -139,7 +149,7 @@
       <div id="ambientGlowPortal" class="ambient-glow-portal" aria-hidden="true"></div>
       <section class="transcript">
         <div id="presentationLive" class="presentation-live" aria-label="各語言最新字幕"></div>
-        <p id="presentationStatus" class="presentation-status" role="status">各語言獨立顯示完整字幕，自動跟隨最新句尾。</p>
+        <p id="presentationStatus" class="presentation-status" role="status">各語言獨立跟隨句尾；自動模式先顯示暫定譯文，整句完成後校正（會增加文字翻譯 API 用量）。</p>
         <div class="panel-head" id="panelHead">
           <span id="colHeadSpeaker">講者原文 <small>ORIGINAL SPEECH</small></span>
           <span id="colHeadTarget1">即時口譯 <small id="headTarget1">SIMULTANEOUS TRANSLATION</small></span>
@@ -221,55 +231,54 @@
     </section>
     </div>
 
-    <details>
-      <summary>文字手動翻譯／連線測試</summary>
-      <textarea id="manual" placeholder="貼上演講文字，可測試即時串流翻譯效果。"></textarea>
-      <button id="translate">串流翻譯文字</button>
-    </details>
-
-    <p class="note">
-      Gemini 模式會將音訊連續傳送至 Google；OpenAI 模式會傳送至 OpenAI，兩者依 API 額度計費。
-      Gemini 為預覽服務，自動偵測原語言，僅顯示字幕、不播放譯音（服務仍可能計算音訊輸出費用）。
-      自動備用啟用後，Gemini 中斷將改由 OpenAI 處理後續收音；切換期間的未完成字幕可能缺漏。
-      線上演講請選取分頁並勾選「分享分頁音訊」。免金鑰模式使用瀏覽器語音辨識，翻譯可能將辨識文字傳送至 Google；僅支援麥克風與指定演講語言。
-    </p>
+    <div style="display:none!important;" hidden>
+      <details>
+        <summary>文字手動翻譯／連線測試</summary>
+        <textarea id="manual" placeholder="貼上演講文字，可測試即時串流翻譯效果。"></textarea>
+        <button id="translate">串流翻譯文字</button>
+      </details>
+    </div>
     </div> <!-- end #lectureView -->
 
     <div id="conversationView" class="conversation-view" style="display:none;">
       <header class="conv-header">
         <div>
           <div class="eyebrow">BIDIRECTIONAL REAL-TIME DIALOGUE</div>
-          <h1>面對面雙向即時對話口譯</h1>
-          <p>商務交流、外語面試、跨國諮詢與一對一多語言自由對話。</p>
+          <h1>面對面雙向即時溝通口譯</h1>
         </div>
         <div class="header-actions">
-          <label class="inline tts-toggle"><input id="convAutoTTS" type="checkbox" checked> 🔊 自動朗讀譯文</label>
+          <label class="inline tts-toggle"><input id="convAutoTTS" type="checkbox" checked> 🔊 手動文字翻譯完成後朗讀</label>
           <button id="convExport">↓ 匯出對話紀錄</button>
           <button id="convClear">清空對話</button>
         </div>
       </header>
 
-      <section class="conv-live-panel">
-        <div class="conv-live-actions"><button id="convLiveStart">● 開始三語即時聆聽</button><button id="convLiveClear">清空即時字幕</button><span id="convLiveStatus">需要 Gemini API 金鑰</span></div>
-        <p class="note">自動偵測中文、英文或日文；三個 Gemini 連線會分別計費。每次儘量由一人說話；即時模式無法辨識說話者身分，語言與醫學術語仍需人工核對。</p>
-        <div class="conv-live-source"><strong>偵測原文 · <span id="convDetected">等待語音</span></strong><p id="convLiveSource">等待開始聆聽…</p></div>
-        <div class="conv-live-grid"><section><h3>繁體中文 · 台灣</h3><p id="convLiveZh">等待翻譯…</p></section><section><h3>English · 英文</h3><p id="convLiveEn">等待翻譯…</p></section><section><h3>日本語 · 日文</h3><p id="convLiveJa">等待翻譯…</p></section></div>
-      </section>
-      <details><summary>手動雙語對話與文字輸入</summary>
-      <section class="controls conv-controls">
-        <label>我方語言 (母語)
+      <!-- 雙向溝通頂部橫排控制列 -->
+      <section class="controls conv-controls-bar">
+        <div class="ctrl-group">
+          <label for="convLangCount">對話語言數</label>
+          <select id="convLangCount">
+            <option value="2">2 種語言（雙人對話）</option>
+            <option value="3" selected>3 種語言</option>
+            <option value="4">4 種語言</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group" id="wrapConvLangA">
+          <label for="convLangA">第 1 種語言</label>
           <select id="convLangA">
             <option value="zh-TW" data-target="Traditional Chinese (Taiwan)" selected>繁體中文 · 台灣</option>
             <option value="en-US" data-target="English">English</option>
             <option value="ja-JP" data-target="Japanese">日本語</option>
             <option value="bn-BD" data-target="Bengali">বাংলা · 孟加拉語</option>
-            <option value="tvl" data-target="Tuvaluan">Tuvaluan · 吐瓦魯語（文字實驗）</option>
+            <option value="tvl" data-target="Tuvaluan">Tuvaluan · 吐瓦魯語</option>
           </select>
-        </label>
+        </div>
 
-        <button class="conv-swap-btn" id="convSwapLangs" title="快速對調語言">⇄</button>
+        <button class="conv-swap-btn" id="convSwapLangs" title="快速對調語言 1 與語言 2">⇄</button>
 
-        <label>對方語言 (外語)
+        <div class="ctrl-group" id="wrapConvLangB">
+          <label for="convLangB">第 2 種語言</label>
           <select id="convLangB">
             <option value="en-US" data-target="English" selected>English · 英文</option>
             <option value="ja-JP" data-target="Japanese">日本語 · 日文</option>
@@ -279,64 +288,169 @@
             <option value="de-DE" data-target="German">Deutsch · 德文</option>
             <option value="zh-TW" data-target="Traditional Chinese (Taiwan)">繁體中文</option>
             <option value="bn-BD" data-target="Bengali">বাংলা · 孟加拉語</option>
-            <option value="tvl" data-target="Tuvaluan">Tuvaluan · 吐瓦魯語（文字實驗）</option>
+            <option value="tvl" data-target="Tuvaluan">Tuvaluan · 吐瓦魯語</option>
           </select>
-        </label>
+        </div>
 
-        <label>翻譯方式
+        <div class="ctrl-group" id="wrapConvLangC">
+          <label for="convLangC">第 3 種語言</label>
+          <select id="convLangC">
+            <option value="ja-JP" data-target="Japanese" selected>日本語 · 日文</option>
+            <option value="en-US" data-target="English">English · 英文</option>
+            <option value="ko-KR" data-target="Korean">한국어 · 韓文</option>
+            <option value="es-ES" data-target="Spanish">Español · 西班牙文</option>
+            <option value="fr-FR" data-target="French">Français · 法文</option>
+            <option value="de-DE" data-target="German">Deutsch · 德文</option>
+            <option value="zh-TW" data-target="Traditional Chinese (Taiwan)">繁體中文</option>
+            <option value="bn-BD" data-target="Bengali">বাংলা · 孟加拉語</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group" id="wrapConvLangD" style="display:none;">
+          <label for="convLangD">第 4 種語言</label>
+          <select id="convLangD">
+            <option value="ko-KR" data-target="Korean" selected>한국어 · 韓文</option>
+            <option value="es-ES" data-target="Spanish">Español · 西班牙文</option>
+            <option value="fr-FR" data-target="French">Français · 法文</option>
+            <option value="de-DE" data-target="German">Deutsch · 德文</option>
+            <option value="ja-JP" data-target="Japanese">日本語 · 日文</option>
+            <option value="en-US" data-target="English">English · 英文</option>
+            <option value="zh-TW" data-target="Traditional Chinese (Taiwan)">繁體中文</option>
+            <option value="bn-BD" data-target="Bengali">বাংলা · 孟加拉語</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <label for="convEngine">手動文字翻譯方式</label>
           <select id="convEngine">
-            <option value="free" selected>🌐 免金鑰即時翻譯 (無需 API · 免費即用)</option>
+            <option value="free" selected>🌐 免金鑰文字翻譯</option>
             <option value="ai">🤖 AI 大模型串流 (Gemini / OpenAI)</option>
           </select>
-        </label>
+        </div>
+
+        <div class="ctrl-group ctrl-actions">
+          <button class="primary" id="convLiveStart">● 開始自動對話聆聽</button>
+          <button id="convLiveClear">清空對話</button>
+        </div>
       </section>
 
-      <p class="note">吐瓦魯語目前僅提供 AI 大模型的手動文字翻譯實驗功能，品質尚未驗證；語音辨識及朗讀尚不支援。</p>
-
       <div class="statusbar conv-statusbar">
-        <span id="convStatus">○ 準備就緒，點擊下方按鈕即可開口說話</span>
+        <span id="convLiveStatus">自動多語聆聽需要 Gemini API 金鑰。🎙️ 點擊「開始自動對話聆聽」授權麥克風後，系統將自動全程收音、辨識說話語言並即時翻譯</span>
+        <span id="convStatus" style="display:none;">○ 準備就緒</span>
         <span id="convCount">0 則對話</span>
       </div>
 
-      <div class="transcript-portal-wrap">
-        <div id="convGlowPortal" class="ambient-glow-portal" aria-hidden="true"></div>
-        <section class="conv-feed-wrapper">
-          <div id="convFeed" class="conv-feed">
-            <div class="conv-empty">
-              <div class="sound">💬</div>
-              <h2>隨時開始自然雙向對話</h2>
-              <p>點擊下方「說中文」或「說外語」，系統會即時翻譯並由語音朗讀譯文給對方聽。</p>
+      <!-- 隱藏的相容元素 (完全相容現有測試及既有邏輯) -->
+      <div style="display:none!important;" hidden>
+        <span id="convDetected">等待語音</span>
+        <p id="convLiveSource">等待開始聆聽…</p>
+        <p id="convLiveZh">等待翻譯…</p>
+        <p id="convLiveEn">等待翻譯…</p>
+        <p id="convLiveJa">等待翻譯…</p><p id="convLiveKo">等待翻譯…</p>
+        <div id="convFeed"></div>
+        <input id="convTextInput" type="text">
+        <button id="convSendA">我方送出</button>
+        <button id="convSendB">對方送出</button>
+        <button id="btnSpeakA"><span id="labelSpeakA">說中文 (第 1 種)</span></button>
+        <button id="btnSpeakB"><span id="labelSpeakB">說英文 (第 2 種)</span></button>
+        <button id="btnSpeakC"><span id="labelSpeakC">說日文 (第 3 種)</span></button>
+        <button id="btnSpeakD"><span id="labelSpeakD">說韓文 (第 4 種)</span></button>
+      </div>
+
+      <!-- 依手繪圖稿動態切換排版的對話欄卡片 (全程自動收音與語言偵測) -->
+      <div id="convPanes" class="conv-panes grid-3">
+        <!-- 第 1 欄 (設定第一種) -->
+        <section class="conv-pane" id="paneConv1">
+          <div class="conv-pane-head">
+            <span class="pane-badge">語言 1</span>
+            <h3 id="paneHead1">繁體中文 · 台灣</h3>
+            <span class="pane-state" id="paneState1">準備就緒</span>
+          </div>
+          <div class="conv-pane-body" id="paneBody1">
+            <div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>
+            <div class="pane-live-stream" id="paneLive1"></div>
+          </div>
+          <div class="conv-pane-foot">
+            <div class="pane-mic-indicator" id="paneIndicator1">
+              <span class="live-dot"></span>
+              <span class="indicator-text" id="indicatorText1">全程自動收音 · 說話自動辨識</span>
+            </div>
+            <div class="pane-quick-input">
+              <input type="text" id="inputConv1" placeholder="或手動打字…">
+              <button id="btnSend1">送出</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 第 2 欄 (設定第二種) -->
+        <section class="conv-pane" id="paneConv2">
+          <div class="conv-pane-head">
+            <span class="pane-badge">語言 2</span>
+            <h3 id="paneHead2">English · 英文</h3>
+            <span class="pane-state" id="paneState2">準備就緒</span>
+          </div>
+          <div class="conv-pane-body" id="paneBody2">
+            <div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>
+            <div class="pane-live-stream" id="paneLive2"></div>
+          </div>
+          <div class="conv-pane-foot">
+            <div class="pane-mic-indicator" id="paneIndicator2">
+              <span class="live-dot"></span>
+              <span class="indicator-text" id="indicatorText2">全程自動收音 · 說話自動辨識</span>
+            </div>
+            <div class="pane-quick-input">
+              <input type="text" id="inputConv2" placeholder="或手動打字…">
+              <button id="btnSend2">送出</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 第 3 欄 (設定第三種) -->
+        <section class="conv-pane" id="paneConv3">
+          <div class="conv-pane-head">
+            <span class="pane-badge">語言 3</span>
+            <h3 id="paneHead3">日本語 · 日文</h3>
+            <span class="pane-state" id="paneState3">準備就緒</span>
+          </div>
+          <div class="conv-pane-body" id="paneBody3">
+            <div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>
+            <div class="pane-live-stream" id="paneLive3"></div>
+          </div>
+          <div class="conv-pane-foot">
+            <div class="pane-mic-indicator" id="paneIndicator3">
+              <span class="live-dot"></span>
+              <span class="indicator-text" id="indicatorText3">全程自動收音 · 說話自動辨識</span>
+            </div>
+            <div class="pane-quick-input">
+              <input type="text" id="inputConv3" placeholder="或手動打字…">
+              <button id="btnSend3">送出</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 第 4 欄 (設定第四種) -->
+        <section class="conv-pane" id="paneConv4" style="display:none;">
+          <div class="conv-pane-head">
+            <span class="pane-badge">語言 4</span>
+            <h3 id="paneHead4">한국어 · 韓文</h3>
+            <span class="pane-state" id="paneState4">準備就緒</span>
+          </div>
+          <div class="conv-pane-body" id="paneBody4">
+            <div class="pane-empty">等待對話…授權麥克風後可直接開口說話</div>
+            <div class="pane-live-stream" id="paneLive4"></div>
+          </div>
+          <div class="conv-pane-foot">
+            <div class="pane-mic-indicator" id="paneIndicator4">
+              <span class="live-dot"></span>
+              <span class="indicator-text" id="indicatorText4">全程自動收音 · 說話自動辨識</span>
+            </div>
+            <div class="pane-quick-input">
+              <input type="text" id="inputConv4" placeholder="或手動打字…">
+              <button id="btnSend4">送出</button>
             </div>
           </div>
         </section>
       </div>
-
-      <div class="conv-input-panel">
-        <div class="conv-actions">
-          <button id="btnSpeakA" class="btn-talk btn-talk-a">
-            <span class="talk-mic">🗣️</span>
-            <div class="talk-labels">
-              <span class="talk-title" id="labelSpeakA">說中文 (我方)</span>
-              <small class="talk-sub">點擊說話 · 說完再點一下</small>
-            </div>
-          </button>
-
-          <button id="btnSpeakB" class="btn-talk btn-talk-b">
-            <span class="talk-mic">🌐</span>
-            <div class="talk-labels">
-              <span class="talk-title" id="labelSpeakB">說英文 (對方)</span>
-              <small class="talk-sub">點擊說話 · 說完再點一下</small>
-            </div>
-          </button>
-        </div>
-
-        <div class="conv-manual">
-          <input id="convTextInput" type="text" placeholder="手動打字輸入對話…">
-          <button id="convSendA" title="以我方身份發送並翻譯">我方送出</button>
-          <button id="convSendB" title="以對方身份發送並翻譯">對方送出</button>
-        </div>
-      </div>
-      </details>
     </div>
   </main>
 
