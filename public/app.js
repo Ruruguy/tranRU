@@ -2228,10 +2228,10 @@ window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?
 let convLiveGeneration=0, convLiveRunning=false, convLiveStream=null, convLiveContext=null;
 let convLiveNodes=[], convLiveClients=[];
 const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
-function appendConvLive(id,text) {
+function appendConvLive(id,text,replace=false) {
  const el=$(id); if(!el)return;
  if(el.dataset && el.dataset.empty!=='no'){el.textContent='';el.dataset.empty='no';}
- el.textContent+=text;
+ if(replace)el.textContent=text;else el.textContent+=text;
  el.scrollTop=el.scrollHeight;
  const index=['convLiveZh','convLiveEn','convLiveJa','convLiveKo'].indexOf(id);
  if(index>=0){
@@ -2309,9 +2309,28 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
 
   const activeTargets = dynamicTargets;
   if(new Set(activeTargets.map(x=>x[0])).size!==activeTargets.length)throw Error('請為各欄選擇不同的語言');
-  const clients=activeTargets.map(([target,id,paneNum],index)=>new GeminiLiveClient({token,onEvent:(event,data)=>{
+  const clients=activeTargets.map(([target,id,paneNum],index)=>{
+   let turnBase=null,sourceText='',sourceDraft='',sourceLanguage='',directSource=false;
+   return new GeminiLiveClient({token,onEvent:(event,data)=>{
    if(generation!==convLiveGeneration)return;
    const pane= paneNum || index+1;
+   if(turnBase===null && ['input','interim','output'].includes(event)){
+    const el=$(id);turnBase=el?.dataset.empty==='no'?el.textContent:'';
+   }
+   if(['input','interim'].includes(event)&&data.text){
+    if(data.languageCode){
+     if(sourceLanguage && sourceLanguage.split('-')[0]!==data.languageCode.split('-')[0]){turnBase=($(id)?.textContent||'')+'\n';sourceText=sourceDraft='';directSource=false;}
+     sourceLanguage=data.languageCode;
+    }
+    if(event==='interim')sourceDraft=data.text;else {sourceText+=data.text;sourceDraft='';}
+    const native=sourceForTarget({language:sourceLanguage,text:sourceText+sourceDraft},target);
+    if(native){
+     directSource=true;
+     appendConvLive(id,(turnBase||'')+native,true);
+     if($('paneState'+pane))$('paneState'+pane).textContent='正在發言 · 原文即時顯示';
+    }
+   }
+
    if(['reconnecting','reconnected','gap'].includes(event)){
     if($('convLiveStatus'))$('convLiveStatus').textContent=target+'：'+(event==='reconnected'?'已恢復連線，字幕保留':event==='gap'?'音訊暫存不足，可能缺字':'正在自動重新連線');
     if(event==='gap')appendConvLive(id,'\n[連線中斷，可能缺字]\n');
@@ -2330,10 +2349,10 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
      });
     }
    }
-   if(event==='output'&&data.text)appendConvLive(id,isTraditionalChineseTarget(target)?toTaiwanTranscript(data.text,'zh'):data.text);
-   if(event==='turn'){appendConvLive(id,'\n');if(index===0)appendConvLive('convLiveSource','\n');}
-   if(event==='boundary')appendConvLive(id,'\n[連線已更換，上段末尾請核對原聲]\n');
-  },onFailure:error=>{if(generation===convLiveGeneration)stopConvLive('即時翻譯連線中斷：'+error.message);}}));
+   if(event==='output'&&data.text&&!directSource)appendConvLive(id,isTraditionalChineseTarget(target)?toTaiwanTranscript(data.text,'zh'):data.text);
+   if(event==='turn'){appendConvLive(id,'\n');if(index===0)appendConvLive('convLiveSource','\n');turnBase=null;sourceText=sourceDraft=sourceLanguage='';directSource=false;}
+   if(event==='boundary'){appendConvLive(id,'\n[連線已更換，上段末尾請核對原聲]\n');turnBase=null;sourceText=sourceDraft=sourceLanguage='';directSource=false;}
+  },onFailure:error=>{if(generation===convLiveGeneration)stopConvLive('即時翻譯連線中斷：'+error.message);}});});
 
   convLiveClients=clients;
   await Promise.all(clients.map((client,index)=>client.connect(activeTargets[index][0])));
