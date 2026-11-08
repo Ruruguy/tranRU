@@ -8,7 +8,7 @@
 - NAEMT PHTLS：<https://www.naemt.org/education/trauma-education/phtls>（到院前創傷評估及出血控制）。
 - CDC：<https://www.cdc.gov/stroke/about/>、<https://www.cdc.gov/sepsis/about/>（缺血性與出血性中風、敗血症）。
 - NIH MedlinePlus：<https://medlineplus.gov/ency/article/000126.htm>、<https://medlineplus.gov/ency/article/003079.htm>（血胸、氣胸、肺栓塞及胸痛相關術語）。
-- 阿普加評分：<https://platform.who.int/docs/default-source/mca-documents/policy-documents/operational-guidance/GHA-CC-10-02-OPERATIONALGUIDANCE-eng-National-Safe-Motherhood-Protocol.pdf>（五項分值，心率 100 次／分鐘以上為 2 分）；<https://publications.aap.org/pediatrics/article/136/4/819/73821/The-Apgar-Score>（AAP／ACOG：用途與限制）。
+- 阿普加評分：<https://platform.who.int/docs/default-source/mca-documents/policy-documents/operational-guidance/GHA-CC-10-02-OPERATIONALGUIDANCE-eng-National-Safe-Motherhood-Protocol.pdf>（術語來源；網站已移除用途與評分教學區塊）；<https://publications.aap.org/pediatrics/article/136/4/819/73821/The-Apgar-Score>（AAP／ACOG：用途與限制）。
 - 日文對照：<https://www.ncchd.go.jp/press/2026/0220.html>（アプガースコア及五項要素）、<https://www.jrc-cpr.org/wp-content/uploads/2025/10/NCPR2025_PC-1_ver1.pdf>（新生児蘇生、胸郭包み込み両母指圧迫法）。嬰兒兩指按壓術語只供翻譯歷史材料；2025 AHA 兒科基本救命術已不再建議嬰兒 CPR 使用兩指法，見 <https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines/pediatric-basic-life-support>。新生兒與嬰兒的復甦指引範圍應分開。
 
 這些資料提供範圍與概念依據，並非逐條認證中文翻譯。專有名詞、地域慣用語、縮寫與臨床內容仍需專業人員對照原文，以及所屬機關現行規範與在地指引。可選的 AI 術語校對會產生額外 API 請求，仍可能誤譯；初始即時譯文在記錄中保留。

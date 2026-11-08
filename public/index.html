@@ -129,27 +129,10 @@
     </div>
     <details class="medical-reference" open>
       <summary>醫療與救護專業術語參考</summary>
-      <p>依講者原文顯示相關詞彙；新生兒與 Apgar 相關項目提供中、英、日對照。自動互譯與專業精準模式提供辨識詞彙提示；文字翻譯與摘要也會參考相關術語。關閉自動互譯後的 Gemini 直接口譯不套用此詞庫。藥名、數字與處置請核對原文及在地指引。</p>
+      <p>依講者原文顯示相關詞彙，提供專業術語的中、英、日對照。自動互譯與專業精準模式提供辨識詞彙提示；文字翻譯與摘要也會參考相關術語。關閉自動互譯後的 Gemini 直接口譯不套用此詞庫。藥名、數字與處置請核對原文及在地指引。</p>
       <label><input type="checkbox" id="medicalRefine"> Gemini 每段完成後以文字模型參考詞庫重新翻譯（可能增加延遲及 API 費用）</label>
       <span id="medicalRefineStatus" role="status"></span>
       <p id="medicalTerms" aria-live="polite">等待辨識到醫療或救護術語…</p>
-      <details class="apgar-reference">
-        <summary>新生兒阿普加評分（Apgar score）：用途與評分</summary>
-        <p>用五項觀察記錄新生兒出生後的狀態及變化，通常在出生後第 1、5 分鐘評分；若 5 分鐘低於 7 分，依臨床指引持續評估並記錄。每項 0～2 分，總分 0～10 分。</p>
-        <div class="apgar-table-wrap"><table class="apgar-table">
-          <caption>Apgar 五項評分參考</caption>
-          <thead><tr><th scope="col">項目</th><th scope="col">0 分</th><th scope="col">1 分</th><th scope="col">2 分</th></tr></thead>
-          <tbody>
-            <tr><th scope="row">A 外觀（膚色）</th><td>全身蒼白或發紺</td><td>軀幹紅潤、四肢發紺</td><td>全身紅潤</td></tr>
-            <tr><th scope="row">P 脈搏（心率）</th><td>無心跳</td><td>每分鐘低於 100 次</td><td>每分鐘 100 次以上</td></tr>
-            <tr><th scope="row">G 刺激反應</th><td>無反應</td><td>僅有皺眉或輕微反應</td><td>咳嗽、打噴嚏、哭叫或退縮</td></tr>
-            <tr><th scope="row">A 活動力（肌肉張力）</th><td>鬆軟、無活動</td><td>四肢稍有屈曲</td><td>活動有力</td></tr>
-            <tr><th scope="row">R 呼吸</th><td>無呼吸</td><td>緩慢或不規則、哭聲微弱</td><td>呼吸良好、哭聲有力</td></tr>
-          </tbody>
-        </table></div>
-        <p><strong>重要：</strong>Apgar 是紀錄與溝通工具，不能單獨決定是否開始復甦，也不能等待評分才進行必要處置；不能單憑分數預測個別新生兒的長期結果。分數受胎齡、藥物及其他因素影響，應由受訓人員依當地指引綜合評估。</p>
-        <p>參考：<a href="https://platform.who.int/docs/default-source/mca-documents/policy-documents/operational-guidance/GHA-CC-10-02-OPERATIONALGUIDANCE-eng-National-Safe-Motherhood-Protocol.pdf" target="_blank" rel="noopener noreferrer">WHO 公開的 Apgar 評分表</a>；<a href="https://publications.aap.org/pediatrics/article/136/4/819/73821/The-Apgar-Score" target="_blank" rel="noopener noreferrer">AAP／ACOG Apgar 聲明</a>。</p>
-      </details>
     </details>
     <p id="reconnectStatus" class="note" role="status" aria-live="polite" style="white-space:pre-line"></p>
     <div class="transcript-portal-wrap">
