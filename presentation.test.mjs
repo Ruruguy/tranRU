@@ -51,3 +51,9 @@ test('normal transcript renders reordered streaming translations under the corre
  const app=readFileSync('public/app.js','utf8');vm.runInNewContext(app.slice(app.indexOf('function draw()'),app.indexOf('function updateStreamingRow(')),sandbox);sandbox.draw();
  assert.deepEqual(nodes.rows.children[0].children.slice(1).map(cell=>cell.textContent),['日本語','English','中文']);
 });
+test('continuous lecture has exactly three language columns and retains the entire lecture',()=>{
+ const records=Array.from({length:1000},(_,i)=>({id:String(i),target:'zh',translation:'中文'+i,state:'done'}));
+ records.push({secondary:true,parentId:'999',target:'en',translation:'English '.repeat(500),state:'done'},{secondary:true,parentId:'999',target:'ja',translation:'日本語',state:'done'});
+ const lanes=presentationLanes(records,{dual:true,triple:true,targets:['zh','en','ja'],continuous:true});
+ assert.equal(lanes.length,3);assert.equal(lanes[0].items.length,1000);assert.equal(lanes[0].items[0].text,'中文0');assert.equal(lanes[0].items.at(-1).text,'中文999');assert.equal(lanes[2].items.at(-1).text,'日本語');
+});

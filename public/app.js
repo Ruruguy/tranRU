@@ -388,17 +388,18 @@ function getRecentHistory() {
 
 function refreshPresentation() {
   const container=$('presentationLive');
-  if(!container || !document.body.classList.contains('presenting'))return;
+  if(!container)return;
+  container.classList.toggle('has-subtitles',records.length>0);
   const dual=$('dualTranslation').checked, triple=dual&&$('tripleTranslation').checked;
   const label=id=>$(id).selectedOptions[0]?.textContent||$(id).value;
-  renderPresentation(container,presentationLanes(records,{dual,triple,targets:[$('target').value,$('secondTarget').value,$('thirdTarget').value],labels:['講者原文',label('target'),label('secondTarget'),label('thirdTarget')]}),{triple});
+  renderPresentation(container,presentationLanes(records,{dual,triple,targets:[$('target').value,$('secondTarget').value,$('thirdTarget').value],labels:['講者原文',label('target'),label('secondTarget'),label('thirdTarget')],continuous:true}),{triple,continuous:true});
 }
 window.addEventListener('resize',()=>requestAnimationFrame(refreshPresentation));
 
 // Render DOM
 function draw() {
   refreshPresentation();
-  if(document.body.classList.contains('presenting')){
+  if(document.body.classList.contains('presenting') || ($('presentationLive') && records.length)){
     $('count').textContent=records.filter(r=>!r.secondary).length;
     if(typeof updatePiP==='function')updatePiP();
     return;
@@ -536,11 +537,11 @@ function draw() {
 
 function updateStreamingRow(record) {
   refreshPresentation();
-  if(document.body.classList.contains('presenting')){if(typeof updatePiP==='function')updatePiP();return;}
   if (!record.secondary && record.text && $('medicalTerms')) {
     const terms=findMedicalTerms(record.text, 8);
     $('medicalTerms').textContent=terms.length ? terms.map(t=>`${t.zh} · ${t.en}${t.ja?' · '+t.ja:''}${t.aliases.length?' ('+t.aliases.join(', ')+')':''}${t.note?' ［'+t.note+'］':''}`).join('　｜　') : '本段尚未辨識到詞庫術語。';
   }
+  if(document.body.classList.contains('presenting') || ($('presentationLive') && records.length)){if(typeof updatePiP==='function')updatePiP();return;}
   if (record.languageSlot === 3 || $('tripleTranslation').checked || records.some(r=>r.target && r.target!==$(r.secondary?(r.languageSlot===3?'thirdTarget':'secondTarget'):'target').value)) { draw(); return; }
   let row = null;
   const isDual = $('dualTranslation') ? $('dualTranslation').checked : false;
