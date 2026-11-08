@@ -19,12 +19,26 @@ let geminiThird = null, thirdLiveRecord = null;
 let precisionRecord = null;
 let liveBatch = '', liveTurnCounts = [0, 0, 0];
 const translationReady = () => $('translationProvider').value === 'gemini' ? geminiConfigured : $('translationProvider').value === 'openai' ? openaiConfigured : (geminiConfigured || openaiConfigured);
-const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured : (openaiConfigured || geminiConfigured);
+const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured : $('engine').value === 'vad' ? openaiConfigured && translationReady() : translationReady();
+function preferredEngine({gemini=false,openai=false}={}) {
+ return gemini?'gemini':openai?'vad':null;
+}
+function applyServicePriority() {
+ if(!$('autoService')?.checked)return;
+ const engine=preferredEngine({gemini:geminiConfigured,openai:openaiConfigured});
+ $('engine').value=engine||'gemini';
+ $('translationProvider').value='auto';
+}
+function serviceReadyMessage() {
+ if(($('engine').value==='azure'||($('autoService')?.checked&&azureKey))&&!translationReady())return 'Azure Speech 只負責辨識；還需要 Gemini 或 OpenAI 金鑰才能產生譯文。';
+ return canStart()?'○ 準備就緒 · '+$('engine').selectedOptions[0].textContent:'○ 請先設定所選服務的 API 金鑰';
+}
 function updateKeys(s) {
  openaiConfigured = s.openaiConfigured ?? s.configured; geminiConfigured = !!s.geminiConfigured; configured = openaiConfigured || geminiConfigured;
  if ($('keyStatus')) $('keyStatus').textContent = `Gemini：${geminiConfigured ? '已設定' : '未設定'}；OpenAI：${openaiConfigured ? '已設定' : '未設定'}`;
  if(s.browserOnly && $('keyDescription'))$('keyDescription').textContent='線上版：請填入自己的 API 金鑰。金鑰僅保存在本分頁記憶體，直接送至 Google／OpenAI，不會上傳至本站主機；重新整理後需重填。';
  if (s.translationProvider && $('translationProvider')) $('translationProvider').value = s.translationProvider;
+ applyServicePriority();
 }
 let running = false;
 let starting = false;
@@ -57,14 +71,17 @@ try {
   updateKeys(s);
   if (s.model && $('model')) $('model').value = s.model;
   if (s.speech && $('speech')) $('speech').value = s.speech;
-  status(configured ? '○ 準備就緒' : '○ 請先設定 Gemini 或 OpenAI API 金鑰');
+  status(serviceReadyMessage());
 } catch {
   status('無法連線本機伺服器，請重新啟動。');
 }
 
 // Settings Dialog
 $('settings').onclick = () => $('dialog').showModal();
+$('autoService').onchange=()=>{applyServicePriority();status(serviceReadyMessage());};
+$('translationProvider').onchange=()=>{if($('translationProvider').value!=='auto')$('autoService').checked=false;};
 $('engine').onchange = () => {
+  $('autoService').checked=false;
   if ($('engine').value === 'free') {
     status('○ 準備就緒（免金鑰即時模式）');
   } else {
@@ -83,7 +100,7 @@ $('save').onclick = async () => {
       body: JSON.stringify({
         key: $('key').value || undefined,
         geminiKey: $('geminiKey').value || undefined,
-        translationProvider: $('translationProvider')?.value || undefined,
+        translationProvider: $('autoService').checked ? 'auto' : $('translationProvider')?.value || undefined,
         model: $('model').value,
         speech: $('speech').value
       })
@@ -97,10 +114,10 @@ $('save').onclick = async () => {
     openaiBlocked = false;
     $('key').value = '';
     $('geminiKey').value = '';
-    $('configStatus').textContent = configured ? '已設定，可以開始翻譯。' : azureKey ? 'Azure 已暫存；請再設定 Gemini 或 OpenAI 金鑰供文字翻譯使用。' : '請輸入金鑰';
-    if (configured) {
+    $('configStatus').textContent = serviceReadyMessage();
+    if (canStart()) {
       $('dialog').close();
-      status('○ 準備就緒');
+      status(serviceReadyMessage());
     }
   } catch (e) {
     $('configStatus').textContent = e.message;
@@ -1075,7 +1092,7 @@ async function stop() {
 
   $('meterFill').style.width = '0%';
   $('start').textContent = '● 開始聆聽';
-  for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = false;
+  for (const id of ['source', 'engine', 'autoService', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = false;
   status('○ 已停止聆聽');
   persist();
 }
@@ -1087,9 +1104,10 @@ $('start').onclick = async () => {
     return;
   }
   if (starting) return;
+  if($('autoService')?.checked)applyServicePriority();
   if (!canStart()) {
     $('dialog').showModal();
-    status('請先設定所選翻譯服務的 API 金鑰');
+    status(($('engine').value==='azure'||azureKey)&&!translationReady()?'Azure Speech 只負責辨識；請再設定 Gemini 或 OpenAI 金鑰以產生譯文。':'請先設定所選翻譯服務的 API 金鑰');
     return;
   }
 
@@ -1104,7 +1122,7 @@ $('start').onclick = async () => {
   if($('engine').value==='azure'){try{validateAzureConfig(azureKey,azureRegion,$('language').value);}catch(e){status(e.message);return;}}
   starting = true;
   status('○ 正在取得收音權限，請查看瀏覽器的麥克風提示…');
-  for(const id of ['source','engine','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
+  for(const id of ['source','engine','autoService','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
   $('start').disabled = true;
   openaiBlocked = false;
   const currentSession = ++session;
@@ -1135,6 +1153,10 @@ $('start').onclick = async () => {
       throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
     }
 
+    if ($('autoService')?.checked) {
+      const response=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({translationProvider:'auto'}),signal:AbortSignal.timeout(8000)});
+      if(!response.ok)throw Error('無法套用服務優先順序，請重新儲存服務設定');
+    }
     if ($('engine').value === 'azure') {
       status('○ 正在連線 Azure Speech…');
       const key=azureKey, region=azureRegion;
@@ -1244,7 +1266,7 @@ $('start').onclick = async () => {
     }
 
     $('start').textContent = '■ 停止聆聽';
-    for (const id of ['source', 'engine', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
+    for (const id of ['source', 'engine', 'autoService', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
     $('badge').textContent = $('engine').value==='azure' ? 'Azure Speech' : gemini ? ($('engine').value==='precision'?'專業精準':'Gemini 串流') : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
     status($('engine').value==='azure' ? '● Azure Speech 辨識中 · Gemini／OpenAI 文字翻譯 · 已啟用自動重新連線' : gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
@@ -1263,7 +1285,7 @@ $('start').onclick = async () => {
     status('無法啟動：' + e.message);
   } finally {
     starting = false;
-    if(!running)for(const id of ['source','engine','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
+    if(!running)for(const id of ['source','engine','autoService','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
     $('start').disabled = false;
   }
 };
@@ -1273,7 +1295,7 @@ if ($('translate')) {
   $('translate').onclick = () => {
   const text = $('manual').value.trim();
   if (!text) return;
-  if (!openaiConfigured) {
+  if (!translationReady()) {
     $('dialog').showModal();
     return;
   }

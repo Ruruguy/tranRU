@@ -44,7 +44,7 @@ npm start
 
 ## OpenAI 模式
 
-保留智慧停頓切段、瀏覽器原生語音辨識與手動文字翻譯。手動文字翻譯需要 OpenAI 金鑰，Gemini Live Translate 僅接受音訊。
+保留智慧停頓切段、瀏覽器原生語音辨識與手動文字翻譯。手動文字翻譯可使用 Gemini 或 OpenAI 文字服務；Gemini Live Translate 音訊模型本身僅接受音訊。
 
 OpenAI 預設 `gpt-4o-mini-transcribe` 與 `gpt-4o-mini`，可在設定修改。辨識失敗時既有程式會嘗試 `whisper-1`。字幕延遲依收音、停頓、網路與模型負載而異，不保證秒數。瀏覽器原生語音依瀏覽器提供的服務與支援程度運作。
 
@@ -137,3 +137,9 @@ GitHub Actions 會在 Node.js 22 與 24 執行測試。測試不呼叫付費 AI 
 ### 演講模式最新字幕
 
 進入「演講模式」後，各語言獨立跟隨最新字幕，較長的英文／日文不會把中文捲出畫面。三語模式保留上方原文、下方三欄譯文；各欄顯示最近幾段，長句自動跟隨最新句尾。退出演講模式即可回看完整逐字稿，匯出與摘要內容不受影響。詳見 [排版與驗證紀錄](docs/presentation-follow.md)。
+
+### 依金鑰自動選擇服務
+
+演講頁預設勾選「依金鑰自動選擇：Gemini → OpenAI」。儲存金鑰後，有 Gemini 就選 Gemini；沒有 Gemini、但有 OpenAI 就選 OpenAI。這是依已設定金鑰做啟動選擇，不代表金鑰已通過服務端驗證；連線失敗是否轉 OpenAI 仍由原本的備用開關控制。
+
+Azure Speech 是選用的辨識引擎，必須搭配 Gemini／OpenAI 文字翻譯，不是第三個獨立翻譯備用。手動選擇辨識引擎或指定文字翻譯供應商會取消自動選擇；重新勾選可恢復優先順序。金鑰欄位排列為 Gemini、OpenAI、Azure。

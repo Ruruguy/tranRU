@@ -38,6 +38,7 @@ test('server integration & SSE contract test', async (t) => {
   const s = await fetch(base + '/api/status').then(r => r.json());
   assert.equal(typeof s.token, 'string');
   assert.equal(s.configured, false);
+  assert.equal(s.translationProvider, 'auto', 'status must preserve auto preference even before keys are added');
   assert.equal(s.geminiConfigured, false);
   const missingCheck=await fetch(base+'/api/gemini-check',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':s.token},body:'{}'});
   assert.equal(missingCheck.status,400);

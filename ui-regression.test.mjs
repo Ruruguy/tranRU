@@ -55,7 +55,7 @@ test('three live streams link delayed subtitle turns to the matching original',(
  assert.equal(sandbox.records.filter(r=>r.languageSlot===3)[1].parentId,sandbox.records.find(r=>r.text==='second').id);
 });
 test('tab sharing is requested synchronously and tracks close if Gemini fails to connect',async()=>{
- const ids=['start','source','engine','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
+ const ids=['start','source','engine','autoService','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
  const nodes=Object.fromEntries(ids.map(id=>[id,{value:'',checked:false,style:{},disabled:false}]));
  Object.assign(nodes.source,{value:'tab'});Object.assign(nodes.engine,{value:'gemini'});Object.assign(nodes.language,{value:'en'});Object.assign(nodes.target,{value:'English'});
  let active=true,stopped=false,message='';queueMicrotask(()=>{active=false;});
@@ -89,4 +89,27 @@ test('Azure and precision require the selected text provider before capturing au
  context.azureKey='';assert.equal(context.ready(),false);
  nodes.engine.value='precision';assert.equal(context.ready(),false);context.geminiConfigured=true;assert.equal(context.ready(),true);
  nodes.translationProvider.value='openai';context.openaiConfigured=false;assert.equal(context.ready(),false);
+});
+test('automatic speech priority uses saved keys, while manual choice is preserved',()=>{
+ const nodes={autoService:{checked:true},engine:{value:'azure'},translationProvider:{value:'openai'}};
+ const sandbox={$:id=>nodes[id],geminiConfigured:true,openaiConfigured:true,azureKey:'placeholder',azureRegion:'eastasia'};
+ vm.createContext(sandbox);vm.runInContext(app.slice(app.indexOf('function preferredEngine('),app.indexOf('function serviceReadyMessage(')),sandbox);
+ sandbox.applyServicePriority();assert.equal(nodes.engine.value,'gemini');assert.equal(nodes.translationProvider.value,'auto');
+ sandbox.geminiConfigured=false;sandbox.applyServicePriority();assert.equal(nodes.engine.value,'vad');
+ sandbox.openaiConfigured=false;sandbox.applyServicePriority();assert.equal(nodes.engine.value,'gemini');assert.equal(sandbox.preferredEngine({azure:true}),null);
+ sandbox.azureKey='';assert.equal(sandbox.preferredEngine({}),null);
+ nodes.autoService.checked=false;nodes.engine.value='precision';sandbox.geminiConfigured=true;sandbox.applyServicePriority();assert.equal(nodes.engine.value,'precision');
+});
+test('OpenAI speech cannot start with only a Gemini key; native and free remain independent',()=>{
+ const nodes={engine:{value:'vad'},translationProvider:{value:'auto'}};
+ const context={$:id=>nodes[id],azureKey:'',azureRegion:'',geminiConfigured:true,openaiConfigured:false};vm.createContext(context);
+ vm.runInContext(app.slice(app.indexOf('const translationReady'),app.indexOf('function preferredEngine'))+'\nthis.ready=canStart;',context);
+ assert.equal(context.ready(),false);nodes.engine.value='native';assert.equal(context.ready(),true);
+ nodes.translationProvider.value='openai';assert.equal(context.ready(),false);nodes.engine.value='free';assert.equal(context.ready(),true);
+});
+test('manual text translation accepts Gemini without requiring an OpenAI key',()=>{
+ const nodes={translate:{},manual:{value:'休克'},dialog:{showModal(){throw Error('should not request another key');}}};let sent;
+ const sandbox={$:id=>nodes[id],translationReady:()=>true,newRecord:({text})=>({text,target:'English'}),getRecentHistory:()=>[],streamRecord:(r,endpoint)=>sent={r,endpoint}};
+ vm.runInNewContext(app.slice(app.indexOf("if ($('translate'))"),app.indexOf('// Demo Subtitles')),sandbox);
+ nodes.translate.onclick();assert.equal(sent.endpoint,'translate-stream');assert.equal(sent.r.text,'休克');
 });
