@@ -39,15 +39,16 @@
 
       <label class="ctrl-engine">辨識引擎
         <select id="engine">
-          <option value="gemini">✨ Gemini 即時翻譯（推薦）</option>
-          <option value="azure">☁ Azure Speech ＋ Gemini／OpenAI 翻譯</option>
+          <option value="gemini">✨ Gemini 即時翻譯（第一優先）</option>
+          <option value="vad">⚡ OpenAI 智慧停頓切段（第二優先）</option>
+          <option value="azure">☁ Azure Speech 辨識＋文字翻譯（選用）</option>
           <option value="precision">🩺 Gemini 專業精準模式（醫療詞彙提示）</option>
-          <option value="vad">⚡ 智慧停頓切段 (OpenAI)</option>
           <option value="native">🚀 極速即時模式 (原生語音)</option>
           <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
         </select>
       </label>
 
+      <label class="inline" title="依已儲存的金鑰選擇；手動選引擎或文字服務可取消自動選擇"><input id="autoService" type="checkbox" checked>依金鑰自動選擇：Gemini → OpenAI</label>
       <label class="ctrl-lang">演講語言
         <select id="language">
           <option value="en">English · 英文</option>
@@ -359,14 +360,6 @@
     <h2>翻譯與辨識服務設定</h2>
     <p id="keyDescription">請填入你自己的 Gemini API 金鑰。金鑰僅暫存在本站伺服器上屬於你的工作階段記憶體，不寫入磁碟；閒置約 30 分鐘或伺服器重啟後需重填。只有設定與使用時會送往服務端，不會提供給其他訪客。</p>
     
-    <label>Azure Speech 金鑰（選用；不是 Azure OpenAI 金鑰）
-      <input id="azureKey" type="password" autocomplete="off" placeholder="Azure Speech 資源的 Key 1 或 Key 2">
-    </label>
-    <label>Azure Speech 資源區域
-      <input id="azureRegion" autocomplete="off" placeholder="例如 eastasia 或 southeastasia">
-    </label>
-    <p id="azureKeyStatus">Azure：未設定</p>
-    <small>Azure 模式先辨識，再以 Gemini／OpenAI 翻譯，可沿用三語字幕及醫療詞庫。請指定演講語言。Azure 金鑰只保存在本分頁記憶體，重新整理需重填；音訊與詞彙提示直接送往 Microsoft。需要另外設定下方至少一組文字翻譯金鑰。</small>
     <label>Gemini API 金鑰（主要服務）
       <input id="geminiKey" type="password" autocomplete="off" placeholder="貼上 Google AI Studio API 金鑰">
     </label>
@@ -376,11 +369,19 @@
       <input id="key" type="password" autocomplete="off" placeholder="sk-proj-…">
     </label>
     
-    <label>翻譯模型 (Chat Model)
+    <label>Azure Speech 金鑰（選用；不是 Azure OpenAI 金鑰）
+      <input id="azureKey" type="password" autocomplete="off" placeholder="Azure Speech 資源的 Key 1 或 Key 2">
+    </label>
+    <label>Azure Speech 資源區域
+      <input id="azureRegion" autocomplete="off" placeholder="例如 eastasia 或 southeastasia">
+    </label>
+    <p id="azureKeyStatus">Azure：未設定</p>
+    <small>Azure 模式先辨識，再以 Gemini／OpenAI 翻譯，可沿用三語字幕及醫療詞庫。請指定演講語言。Azure 金鑰只保存在本分頁記憶體，重新整理需重填；音訊與詞彙提示直接送往 Microsoft。需要另設上方 Gemini 或 OpenAI 至少一組金鑰；Azure 不會作為獨立翻譯服務自動接替。</small>
+    <label>OpenAI 翻譯模型 (Chat Model)
       <input id="model" value="gpt-4o-mini" placeholder="gpt-4o-mini 或 gpt-4o">
     </label>
     
-    <label>語音辨識模型 (STT Model)
+    <label>OpenAI 語音辨識模型 (STT Model)
       <input id="speech" value="gpt-4o-mini-transcribe" placeholder="gpt-4o-mini-transcribe 或 whisper-1">
     </label>
 

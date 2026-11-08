@@ -50,7 +50,7 @@ const serviceStatus = () => ({
   configured: !!(key || geminiKey),
   openaiConfigured: !!key,
   geminiConfigured: !!geminiKey,
-  translationProvider: translationProvider === 'auto' ? (geminiKey ? 'gemini' : 'openai') : translationProvider,
+  translationProvider,
   token,
   model,
   speech
