@@ -13,7 +13,7 @@ test('page module parses and required controls exist in valid UTF-8',()=>{
  assert.doesNotMatch(html, /name="tranru-mode"/);
 });
 test('precision mode updates interim text and translates only a finalized utterance',()=>{
- const requests=[];const records=[];const sandbox={$:()=>({value:'precision'}),precisionRecord:null,records,toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
+ const requests=[];const records=[];const sandbox={$:()=>({value:'precision'}),precisionRecord:null,records,scheduleInterimPreview(){},cancelInterimPreview(){},toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
  vm.runInNewContext(app.slice(app.indexOf('function handlePrecisionEvent('),app.indexOf('function handleGeminiEvent(')),sandbox);
  sandbox.handlePrecisionEvent('interim',{text:'意识'});assert.equal(records[0].text,'意識');assert.equal(requests.length,0);
  sandbox.handlePrecisionEvent('interim',{text:'意识不清'});assert.equal(records[0].text,'意識不清');

@@ -57,3 +57,14 @@ test('continuous lecture has exactly three language columns and retains the enti
  const lanes=presentationLanes(records,{dual:true,triple:true,targets:['zh','en','ja'],continuous:true});
  assert.equal(lanes.length,3);assert.equal(lanes[0].items.length,1000);assert.equal(lanes[0].items[0].text,'中文0');assert.equal(lanes[0].items.at(-1).text,'中文999');assert.equal(lanes[2].items.at(-1).text,'日本語');
 });
+test('lecture explicitly includes source above three target languages',()=>{
+ const lanes=presentationLanes([{id:'1',text:'講者原文',translation:'譯文'}],{dual:true,triple:true,continuous:true,includeSpeaker:true});
+ assert.equal(lanes.length,4);assert.equal(lanes[0].items[0].text,'講者原文');
+ assert.equal(presentationLanes([],{continuous:true,labels:['講者原文']}).length,1,'labels must not determine pane count');
+});
+test('Chinese speech appears immediately in selected Traditional Chinese column without waiting for echoed translation',()=>{
+ const records=[{id:'1',language:'cmn-Hans-CN',text:'意识不清，准备搬运。',target:'Traditional Chinese (Taiwan)',translation:'',state:'streaming'}];
+ const lanes=presentationLanes(records,{targets:['Traditional Chinese (Taiwan)'],includeSpeaker:true,continuous:true});
+ assert.equal(lanes[1].items[0].text,'意識不清，準備搬運。');assert.equal(lanes[1].state,'原文即時顯示');
+ records[0].language='ja-JP';records[0].text='意識がありません';assert.equal(presentationLanes(records,{targets:['Traditional Chinese (Taiwan)'],includeSpeaker:true})[1].items.length,0);
+});
