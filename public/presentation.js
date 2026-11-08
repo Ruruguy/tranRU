@@ -1,6 +1,17 @@
+export function indexTranslations(records) {
+ const byParent=new Map(),byId=new Map(),byTime=new Map();
+ for(const r of records){
+  if(!r.secondary)continue;
+  if(r.parentId){const key=JSON.stringify([r.parentId,r.target]);if(!byParent.has(key))byParent.set(key,r);}
+  else {byId.set(JSON.stringify([r.id,r.target]),r);const key=JSON.stringify([r.sessionId,r.time,r.target]);if(!byTime.has(key))byTime.set(key,r);}
+ }
+ return (parent,target)=>parent.target===target?parent:byParent.get(JSON.stringify([parent.id,target]))||byId.get(JSON.stringify([parent.secondId,target]))||byTime.get(JSON.stringify([parent.sessionId,parent.time,target]))||null;
+}
+
 // Presentation follows each language independently; the full transcript stays
 // in records and in the normal view. Late translations keep their source order.
-export function presentationLanes(records, {dual=false,triple=false,labels=[]}={}) {
+export function presentationLanes(records, {dual=false,triple=false,labels=[],targets=[]}={}) {
+ const findTranslation=indexTranslations(records);
  const primary=records.filter(r=>!r.secondary && r.target!=='連線狀態');
  const children=new Map(),legacyIds=new Map(),legacyTimes=new Map();
  for(const r of records.filter(r=>r.secondary)){
@@ -12,8 +23,8 @@ export function presentationLanes(records, {dual=false,triple=false,labels=[]}={
   const items=[];
   let state='等待字幕…';
   for(const r of primary){
-   const item=slot<2?r:children.get(`${r.id}:${slot}`) || (slot===2?(legacyIds.get(r.secondId)||legacyTimes.get(JSON.stringify([r.sessionId,r.time]))):null);
-   const text=slot===0?(r.text||r.interim||''):(item?.translation || (slot===2?r.secondTranslation:'') || '');
+   const item=slot===0?r:targets[slot-1]?findTranslation(r,targets[slot-1]):slot<2?r:children.get(`${r.id}:${slot}`) || (slot===2?(legacyIds.get(r.secondId)||legacyTimes.get(JSON.stringify([r.sessionId,r.time]))):null);
+   const text=slot===0?(r.text||r.interim||''):(item?.translation || (slot===2&&!targets.length?r.secondTranslation:'') || '');
    if(text)items.push({id:r.id,time:r.time,text,error:slot>0&&item?.state==='error'?item.error||'翻譯中斷':''});
    state=item?.state==='error'?(item.error||'翻譯中斷，請核對原文'):!text?'等待字幕…':item?.state==='streaming'?'即時更新中':'最新字幕';
   }

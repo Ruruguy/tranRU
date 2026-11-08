@@ -157,7 +157,7 @@ function buildTranslationMessages(text, target, context, history = []) {
   const systemPrompt = [
     `You are an elite simultaneous interpreter translating spoken speech and live dialogue into fluent, authentic, natural ${targetLang}.`,
     'Guidelines for real-time interpretation:',
-    '1. Output ONLY the translated text. Do not provide notes, explanations, or quotes.',
+    '1. Output ONLY the translated text. Do not provide notes, explanations, or quotes. If all input is already in the target language, preserve its wording; only normalize Traditional Chinese writing when requested.',
     '2. Produce authentic, concise spoken phrasing suitable for live conversation or subtitles. Avoid awkward word-for-word translationese.',
     '3. If translating to Traditional Chinese, strictly use standard Taiwanese terminology and idioms (e.g., 軟體, 演算法, 專案, 記憶體, 最佳化, 雲端運算). If translating to English, Japanese, or other languages, use idiomatic native expressions.',
     '4. Clean up minor verbal disfluencies (e.g., "uh", "um", "like", "you know") without losing meaning.',
@@ -235,7 +235,7 @@ async function dispatchTranslationStream(res, text, target, context, history) {
     const domainContext = resolveDomainContext(context);
     const sysPrompt = [
       `You are an elite simultaneous interpreter translating spoken speech and live dialogue into fluent, authentic, natural ${targetLang}.`,
-      '1. Output ONLY the translated text. Do not provide notes, explanations, or quotes.',
+      '1. Output ONLY the translated text. Do not provide notes, explanations, or quotes. If all input is already in the target language, preserve its wording; only normalize Traditional Chinese writing when requested.',
       '2. Produce authentic, concise spoken phrasing suitable for live conversation or subtitles.',
       '3. If translating to Traditional Chinese, strictly use standard Taiwanese terminology (e.g. 軟體, 演算法, 專案, 記憶體, 最佳化, 雲端運算). If translating to other languages, use idiomatic native expressions.',
       '4. Maintain continuity with preceding context.',
