@@ -78,6 +78,21 @@ try {
   status('無法連線本機伺服器，請重新啟動。');
 }
 
+let speechProgress={frames:0,sent:0,recognized:0,translated:0,started:0,lastUpdate:0,heardSound:false};
+function reportSpeechProgress(stage,value=0){
+ if(stage==='reset')speechProgress={frames:0,sent:0,recognized:0,translated:0,started:Date.now(),lastUpdate:0,heardSound:false};
+ if(stage==='frame'){speechProgress.frames++;if(value>.007)speechProgress.heardSound=true;}
+ if(stage==='sent')speechProgress.sent++;
+ if(stage==='recognized')speechProgress.recognized+=value;
+ if(stage==='translated')speechProgress.translated+=value;
+ const el=$('speechProgress');if(!el)return;
+ if(stage==='frame'&&Date.now()-speechProgress.lastUpdate<1000)return;
+ speechProgress.lastUpdate=Date.now();
+ const native=['native','free','azure'].includes($('engine').value);
+ el.textContent=(speechProgress.frames?'收音已有資料':'等待收音資料')+' · '+(native?($('engine').value==='azure'?'Azure 語音辨識':'瀏覽器語音辨識'):('音訊已送出 '+speechProgress.sent+' 段'))+' · 辨識回傳 '+speechProgress.recognized+' 字 · 翻譯回傳 '+speechProgress.translated+' 字';
+ if(speechProgress.heardSound&&!speechProgress.recognized&&Date.now()-speechProgress.started>12000)el.textContent+='。有音量但尚未收到辨識文字；請確認收音裝置，或換辨識引擎測試。';
+}
+
 // Microphone selection is explicit for PCM capture. Web Speech uses its browser default.
 function syncMicrophoneChoice(){
  if($('micDevice'))$('micDevice').disabled=running||starting||$('source').value!=='mic'||['native','free'].includes($('engine').value);
@@ -810,6 +825,7 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
       if(event === 'error')throw Error(data.error || '串流處理異常');
       if(event === 'stt'){record.text = toTaiwanTranscript(data.text || '', data.languageCode||record.language);translateOtherLanguages(record);}
       if(event === 'delta'){
+        if(typeof reportSpeechProgress==='function')reportSpeechProgress('translated',(data.delta||'').length);
         translationRaw += data.delta || '';
         record.translation = isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(translationRaw,'zh') : translationRaw;
       }
@@ -925,6 +941,7 @@ function startNativeSpeech() {
       }
     }
 
+    if(typeof reportSpeechProgress==='function')reportSpeechProgress('recognized',interimTranscript.length+finalTranscript.length);
     interimTranscript = toTaiwanTranscript(interimTranscript, $('language').value);
     finalTranscript = toTaiwanTranscript(finalTranscript, $('language').value);
     if (interimTranscript) {
@@ -1192,6 +1209,7 @@ $('start').onclick = async () => {
   if ($('dualTranslation').checked && $('tripleTranslation').checked && [$('target').value,$('secondTarget').value].includes($('thirdTarget').value)) {status('請選擇三種不同的目標語言');return;}
   if($('engine').value==='azure'){try{validateAzureConfig(azureKey,azureRegion,$('language').value);}catch(e){status(e.message);return;}}
   starting = true;
+  if(typeof reportSpeechProgress==='function')reportSpeechProgress('reset');
   status('○ 正在取得收音權限，請查看瀏覽器的麥克風提示…');
   for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
   $('start').disabled = true;
@@ -1305,6 +1323,7 @@ $('start').onclick = async () => {
       }
       const rms = Math.sqrt(sum / copy.length);
       const zcr = zeroCrossings / copy.length;
+      if(typeof reportSpeechProgress==='function')reportSpeechProgress('frame',rms);
       const meterPercent = Math.min(100, Math.round(rms * 450));
       $('meterFill').style.width = meterPercent + '%';
 
@@ -1549,7 +1568,7 @@ function scheduleInterimPreview(record){
     const parser=new SSEParser((event,data)=>{
      if(preview.closed)return;
      if(event==='error')throw Error(data.error||'暫定翻譯失敗');
-     if(event==='delta')raw+=data.delta||'';
+     if(event==='delta'){raw+=data.delta||'';if(typeof reportSpeechProgress==='function')reportSpeechProgress('translated',(data.delta||'').length);}
      if(event==='done'){complete=true;item.state='done';if(data.translation!==undefined)raw=data.translation;}
      item.translation=isTraditionalChineseTarget(item.target)?toTaiwanTranscript(raw,'zh'):raw;
      refreshPresentation();
@@ -1563,12 +1582,14 @@ function scheduleInterimPreview(record){
  },300);
 }
 function handlePrecisionEvent(event,data) {
+ if(event==='audio-sent'){if(typeof reportSpeechProgress==='function')reportSpeechProgress('sent');return;}
  if(handleReconnectNotice(event,data,'辨識'))return;
  if(event==='boundary'){
   if(precisionRecord)cancelInterimPreview(precisionRecord);
   if(precisionRecord){precisionRecord.state='error';precisionRecord.error='重新連線前的辨識未完成；保留暫定原文供核對。';precisionRecord=null;draw();persist();}return;
  }
  if((event!=='interim' && event!=='final') || !data.text)return;
+ if(typeof reportSpeechProgress==='function')reportSpeechProgress('recognized',data.text.length);
  if($('language').value==='zh'&&!lectureAutoMode()&&data.languageCode&&!/^(zh|cmn)(?:-|$)/i.test(data.languageCode)){status('辨識結果與指定中文不符，請確認麥克風來源、音量與背景聲音；這段不送出翻譯。');return;}
  if(!precisionRecord)precisionRecord=newRecord({provider:$('engine').value==='azure'?'azure-speech':'gemini-transcribe',state:'streaming'});
  if(data.languageCode)precisionRecord.language=data.languageCode;
@@ -1585,10 +1606,12 @@ function handlePrecisionEvent(event,data) {
  }
 }
 function handleGeminiEvent(event,data,secondary=false) {
+ if(event==='audio-sent'){if(!secondary&&typeof reportSpeechProgress==='function')reportSpeechProgress('sent');return;}
  if(handleReconnectNotice(event,data,secondary===3?'第三語言':secondary?'第二語言':'第一語言'))return;
  if(event==='boundary'){finishLiveRecord(true,secondary);return;}
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
  if(!['input','interim','output'].includes(event)||!data.text)return;
+ if(typeof reportSpeechProgress==='function')reportSpeechProgress(event==='output'?'translated':'recognized',data.text.length);
  let r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
  if(!r){
    const slot=secondary===3?3:secondary?2:1;
