@@ -1,8 +1,10 @@
 # tranRU · 演講即時翻譯
 
+> 唯一維護版本：以 2026-11-08 最後提交 `ae70034` 為基底，加入西班牙語。後續統一在本專案修正，不再維護日期版或語言副本。
+
 **直接使用：[開啟 tranRU](https://ruruguy.github.io/tranRU/)**。GitHub 儲存庫頁面顯示的是程式碼；網站使用者可自行輸入 Gemini API 金鑰。
 
-支援本機或 HTTPS 部署的雙欄字幕工具，支援 Gemini 即時翻譯與 OpenAI 備用。需要 Node.js 22 以上，無須安裝外部套件。
+支援本機或 HTTPS 部署的多欄字幕工具，支援 Gemini 即時翻譯與 OpenAI 備用。需要 Node.js 22 以上，無須安裝外部套件。
 
 ## 啟動與設定
 
@@ -10,7 +12,9 @@
 npm start
 ```
 
-以 Chrome 開啟 http://127.0.0.1:8787 ，也可雙擊 `啟動翻譯.command`。
+以 Chrome 開啟 http://127.0.0.1:8787 ，也可雙擊根目錄 `啟動翻譯.command`。現在只使用這一個本機入口。
+
+演講的第一、第二、第三種翻譯語言，以及雙向溝通各欄，都可選繁體中文、英文、日文、孟加拉語、西班牙語。雙向溝通選四種語言時，一般與全螢幕均以等大 2×2 顯示；第四欄預設西班牙語，也可改孟加拉語。四語使用四條 Gemini 連線，各自計費。
 
 1. 打開「服務設定」，填入 Gemini API 金鑰：https://aistudio.google.com/api-keys 。Google AI Pro 訂閱登入並不取代 API 金鑰。
 2. 若要自動備用，再填入 OpenAI API 金鑰，保留「Gemini 中斷時，自動改用 OpenAI」勾選。兩個服務可分別使用，OpenAI 不是使用 Gemini 的必要條件。

@@ -7,7 +7,7 @@ export function transcriptionSetup(language='auto') {
  return {setup:{model:'models/gemini-3.5-transcribe-live',generationConfig:{responseModalities:['TEXT']},inputAudioTranscription:{languageCodes:languages[language]?[languages[language]]:[],customVocabulary:terms,mode:'VERBATIM'}}};
 }
 export function translationSetup(target) {
- const languages={'Traditional Chinese (Taiwan)':'zh-Hant',English:'en',Japanese:'ja',Bengali:'bn'};
+ const languages={'Traditional Chinese (Taiwan)':'zh-Hant',English:'en',Japanese:'ja',Bengali:'bn',Spanish:'es',Spanish:'es'};
  if(!languages[target]) throw Error('不支援的翻譯語言');
  return {setup:{model:'models/gemini-3.5-live-translate-preview',inputAudioTranscription:{},outputAudioTranscription:{},generationConfig:{responseModalities:['AUDIO'],translationConfig:{targetLanguageCode:languages[target],echoTargetLanguage:true}}}};
 }
