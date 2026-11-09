@@ -35,7 +35,7 @@ test('Bengali language choices and unsupported Tuvaluan voice guards',async()=>{
  assert.equal(translationSetup('Bengali').setup.generationConfig.translationConfig.targetLanguageCode,'bn');
  assert.throws(()=>translationSetup('Tuvaluan'));
  assert.match(html,/<option value="bn">/);
- assert.equal((html.match(/data-target="Tuvaluan"/g)||[]).length,2);
+ assert.equal((html.match(/data-target="Tuvaluan"/g)||[]).length,0);
  const nodes={convEngine:{value:'free'},convLangA:{value:'zh-TW'},convLangB:{value:'tvl'},convTextInput:{value:'hello'}};let message='';
  const sandbox={$:id=>nodes[id],convStatus:s=>message=s,configured:true};
  vm.runInNewContext(app.slice(app.indexOf('function sendManualConv('),app.indexOf("if ($('convSendA'))")),sandbox);
