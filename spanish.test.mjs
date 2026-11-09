@@ -29,3 +29,18 @@ test('every display language selector offers exactly the five requested language
  }
 
 });
+
+for(const slot of [0,1,2]) test(`lecture streams Spanish in selectable translation slot ${slot+1}`,()=>{
+ const targets=['Traditional Chinese (Taiwan)','English','Japanese'];targets[slot]='Spanish';
+ const primary={id:'lecture-1',text:'需要協助',language:'zh-TW',target:targets[0],translation:slot===0?'Necesito ayuda.':'',state:'streaming'};
+ const records=[primary];
+ if(slot>0)records.push({id:'spanish-1',parentId:primary.id,secondary:true,languageSlot:slot+1,target:'Spanish',translation:'Necesito',state:'streaming'});
+ let lanes=presentationLanes(records,{dual:true,triple:true,targets,continuous:true,includeSpeaker:true});
+ assert.equal(lanes[slot+1].items[0].text,slot===0?'Necesito ayuda.':'Necesito');
+ const spanishRecord=records.at(-1);spanishRecord.translation='Necesito ayuda.';
+ lanes=presentationLanes(records,{dual:true,triple:true,targets,continuous:true,includeSpeaker:true});
+ assert.equal(lanes[slot+1].items[0].text,'Necesito ayuda.');
+ const native={id:'native',language:'es-MX',text:'Estoy hablando',target:targets[0],state:'streaming'};
+ lanes=presentationLanes([native],{dual:true,triple:true,targets,continuous:true,includeSpeaker:true});
+ assert.equal(lanes[slot+1].items[0].text,'Estoy hablando');
+});
