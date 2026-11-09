@@ -2223,10 +2223,10 @@ if ($('convExport')) {
 
 window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?.cancel();});
 
-// Three independent translation sessions share one microphone. Live Translate
+// Up to four independent translation sessions share one microphone. Live Translate
 // supplies language detection, but does not identify individual speakers.
-let convLiveGeneration=0, convLiveRunning=false, convLiveStream=null, convLiveContext=null;
-let convLiveNodes=[], convLiveClients=[];
+let convLiveGeneration=0, convLiveRunning=false, convLiveStarting=false, convLiveStream=null, convLiveContext=null;
+let convLiveNodes=[], convLiveClients=[], convLiveStartTimer=null;
 const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
 function appendConvLive(id,text,replace=false) {
  const el=$(id); if(!el)return;
@@ -2250,7 +2250,8 @@ function resetConvLiveText(){
  }
 }
 function stopConvLive(message='○ 已停止聆聽'){
- ++convLiveGeneration;convLiveRunning=false;
+ ++convLiveGeneration;convLiveRunning=false;convLiveStarting=false;
+ clearTimeout(convLiveStartTimer);convLiveStartTimer=null;
  for(const client of convLiveClients)client.close();convLiveClients=[];
  for(const node of convLiveNodes){try{node.disconnect();}catch{}}convLiveNodes=[];
  convLiveStream?.getTracks().forEach(track=>track.stop());convLiveStream=null;
@@ -2273,22 +2274,21 @@ function stopConvLive(message='○ 已停止聆聽'){
 }
 if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
  if(convLiveRunning){stopConvLive();return;}
+ if(convLiveStarting)return;
  if(!geminiConfigured){
   $('dialog').showModal();
   if($('convLiveStatus')) $('convLiveStatus').textContent='自動辨識多語對話需要 Gemini API 金鑰；免金鑰僅供指定語言的手動輸入';
   return;
  }
  stopConvSpeech();window.speechSynthesis?.cancel();
+ convLiveStarting=true;
  const generation=++convLiveGeneration;
+ convLiveStartTimer=setTimeout(()=>{if(generation===convLiveGeneration)stopConvLive('啟動逾時：請確認麥克風權限、網路與 Gemini 額度，再重新開始');},30000);
  for(const el of document.querySelectorAll?.('#conversationView select')||[])el.disabled=true;
  if($('convSwapLangs'))$('convSwapLangs').disabled=true;
  $('convLiveStart').disabled=true;
  if($('convLiveStatus')) $('convLiveStatus').textContent='正在取得麥克風授權並建立自動口譯…';
  try{
-  const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
-  if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
-  convLiveStream=captured;
-
   // 動態語言目標設定（相容 conversation-live.test.mjs 預設三語）
   const dynamicTargets = (() => {
    if (!$('convLangCount')) return convLiveTargets;
@@ -2303,12 +2303,24 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
     [getTarget('convLangB', 'English'), 'convLiveEn', 2],
    ];
    if (count >= 3) list.push([getTarget('convLangC', 'Japanese'), 'convLiveJa', 3]);
-   if (count === 4) list.push([getTarget('convLangD', 'Korean'), 'convLiveKo', 4]);
+   if (count === 4) list.push([getTarget('convLangD', 'Bengali'), 'convLiveKo', 4]);
    return list;
   })();
 
   const activeTargets = dynamicTargets;
   if(new Set(activeTargets.map(x=>x[0])).size!==activeTargets.length)throw Error('請為各欄選擇不同的語言');
+  const supported=new Set(['Traditional Chinese (Taiwan)','English','Japanese','Bengali']);
+  for(const [target] of activeTargets)if(!supported.has(target))throw Error('即時對話尚未支援此語言：'+target);
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('請使用支援麥克風的 HTTPS 網頁或 localhost');
+  // Create/resume audio during the click, before waiting for network setup.
+  const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
+  const resumeTask=audioContext.resume().then(()=>null,error=>error);
+  const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
+  convLiveStream=captured;
+  const resumeError=await resumeTask;if(resumeError)throw resumeError;
+  if(!captured.getAudioTracks().length)throw Error('麥克風未提供音訊軌道，請檢查瀏覽器及系統麥克風權限');
+
   const clients=activeTargets.map(([target,id,paneNum],index)=>{
    let turnBase=null,sourceText='',sourceDraft='',sourceLanguage='',directSource=false;
    return new GeminiLiveClient({token,onEvent:(event,data)=>{
@@ -2357,13 +2369,14 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   convLiveClients=clients;
   await Promise.all(clients.map((client,index)=>client.connect(activeTargets[index][0])));
   if(generation!==convLiveGeneration)return;
-  const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
-  await audioContext.resume();if(generation!==convLiveGeneration)return;
+  if(audioContext.state==='suspended'){await audioContext.resume();if(generation!==convLiveGeneration)return;}
+  if(audioContext.state && audioContext.state!=='running')throw Error('音訊處理尚未啟動，請重新按開始並允許麥克風');
   const input=audioContext.createMediaStreamSource(captured),processor=audioContext.createScriptProcessor(2048,1,1),sink=audioContext.createGain(),chunks=new PCMChunks(audioContext.sampleRate);
   convLiveNodes=[input,processor,sink];sink.gain.value=0;input.connect(processor);processor.connect(sink);sink.connect(audioContext.destination);
   processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;for(const chunk of chunks.push(e.inputBuffer.getChannelData(0)))for(const client of clients)client.send(chunk);};
   for(const track of captured.getAudioTracks())track.onended=()=>{if(generation===convLiveGeneration)stopConvLive('麥克風已停止');};
-  convLiveRunning=true;
+  clearTimeout(convLiveStartTimer);convLiveStartTimer=null;
+  convLiveRunning=true;convLiveStarting=false;
   $('convPanes')?.classList?.add('listening');
   for(let p=1; p<=activeTargets.length; p++){
    const s = $('paneState' + p);
