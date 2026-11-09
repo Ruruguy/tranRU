@@ -68,3 +68,9 @@ test('Chinese speech appears immediately in selected Traditional Chinese column 
  assert.equal(lanes[1].items[0].text,'意識不清，準備搬運。');assert.equal(lanes[1].state,'原文即時顯示');
  records[0].language='ja-JP';records[0].text='意識がありません';assert.equal(presentationLanes(records,{targets:['Traditional Chinese (Taiwan)'],includeSpeaker:true})[1].items.length,0);
 });
+
+test('Latin-only misrecognition is not copied into the Chinese pane solely because the configured language is Chinese',()=>{
+ const record={id:'bad',language:'zh',text:'então, então, então',target:'Traditional Chinese (Taiwan)',translation:'',state:'streaming'};
+ const lanes=presentationLanes([record],{targets:['Traditional Chinese (Taiwan)'],includeSpeaker:true});
+ assert.equal(lanes[1].items.length,0);
+});

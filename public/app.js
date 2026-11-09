@@ -21,7 +21,7 @@ const interimPreviews = new WeakMap();
 let liveBatch = '', liveTurnCounts = [0, 0, 0];
 const translationReady = () => $('translationProvider').value === 'gemini' ? geminiConfigured : $('translationProvider').value === 'openai' ? openaiConfigured : (geminiConfigured || openaiConfigured);
 const lectureAutoMode = () => !!$('lectureAuto')?.checked;
-const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured && (!lectureAutoMode() || translationReady()) : $('engine').value === 'vad' ? openaiConfigured && translationReady() : translationReady();
+const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured && ((!lectureAutoMode() && $('language').value==='auto') || translationReady()) : $('engine').value === 'vad' ? openaiConfigured && translationReady() : translationReady();
 function preferredEngine({gemini=false,openai=false}={}) {
  return gemini?'gemini':openai?'vad':null;
 }
@@ -1082,6 +1082,7 @@ async function translateFreeRecord(record) {
 
 // Stop Everything
 async function stop() {
+  starting=false;
   running = false;
   if(precisionRecord)cancelInterimPreview(precisionRecord);
   session++;
@@ -1185,16 +1186,19 @@ $('start').onclick = async () => {
 
     // Screen sharing must be requested directly from the click, before waiting
     // for a network connection that can consume the browser's user activation.
-    stream = sourceVal === 'tab'
+    const capturedStream = sourceVal === 'tab'
       ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
       : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
 
+    if(currentSession!==session){capturedStream.getTracks().forEach(track=>track.stop());return;}
+    stream=capturedStream;
     if (!stream.getAudioTracks().length) {
       throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
     }
 
     if ($('autoService')?.checked) {
       const response=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({translationProvider:'auto'}),signal:AbortSignal.timeout(8000)});
+      if(currentSession!==session)return;
       if(!response.ok)throw Error('無法套用服務優先順序，請重新儲存服務設定');
     }
     if ($('engine').value === 'azure') {
@@ -1206,26 +1210,30 @@ $('start').onclick = async () => {
     }
     if (['gemini','precision'].includes($('engine').value)) {
       status('○ 正在連線 Gemini…');
-      const precision=$('engine').value==='precision'||lectureAutoMode();
-      gemini = new GeminiLiveClient({token,onEvent:precision?handlePrecisionEvent:handleGeminiEvent,onFailure:handleGeminiFailure});
-      try {await gemini.connect($('target').value,precision?{mode:'transcribe',language:$('language').value}:{});}
-      catch(e) {gemini.close();gemini=null;if($('fallback').checked && openaiConfigured && !openaiBlocked){$('engine').value='vad';fallbackReason=e.message;}else throw e;}
+      const precision=$('engine').value==='precision'||lectureAutoMode()||$('language').value!=='auto';
+      const pendingGemini = new GeminiLiveClient({token,onEvent:precision?handlePrecisionEvent:handleGeminiEvent,onFailure:handleGeminiFailure});gemini=pendingGemini;
+      try {await pendingGemini.connect($('target').value,precision?{mode:'transcribe',language:$('language').value}:{});}
+      catch(e) {if(currentSession!==session)return;pendingGemini.close();gemini=null;if($('fallback').checked && openaiConfigured && !openaiBlocked){$('engine').value='vad';fallbackReason=e.message;}else throw e;}
     }
-    if(gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('dualTranslation').checked){
+    if(currentSession!==session)return;
+    if(gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('language').value==='auto' && $('dualTranslation').checked){
       $('secondStatus').textContent='正在連線第二語言…';
       geminiSecond=new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,true),onFailure:handleSecondFailure});
       try {await geminiSecond.connect($('secondTarget').value);$('secondStatus').textContent='第二語言已連線，等待音訊';}
-      catch(e){geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
+      catch(e){if(currentSession!==session)return;geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
     }
-    if (gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('dualTranslation').checked && $('tripleTranslation').checked) {
+    if(currentSession!==session)return;
+    if (gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('language').value==='auto' && $('dualTranslation').checked && $('tripleTranslation').checked) {
       $('thirdStatus').textContent='正在連線第三語言…';
       geminiThird = new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,3),onFailure:error=>handleThirdFailure(error)});
       try { await geminiThird.connect($('thirdTarget').value); $('thirdStatus').textContent='第三語言已連線，等待音訊'; }
-      catch(e) { geminiThird?.close();geminiThird=null; $('thirdStatus').textContent='第三語言連線失敗：'+e.message; }
+      catch(e) {if(currentSession!==session)return; geminiThird?.close();geminiThird=null; $('thirdStatus').textContent='第三語言連線失敗：'+e.message; }
     }
+    if(currentSession!==session)return;
     // AudioContext for VU Meter & VAD
     ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate:16000});
     await ctx.resume();
+    if(currentSession!==session)return;
     if(gemini)pcm=new PCMChunks(ctx.sampleRate);
     sourceNode = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
     processor = ctx.createScriptProcessor(2048, 1, 1);
@@ -1308,12 +1316,14 @@ $('start').onclick = async () => {
     $('start').textContent = '■ 停止聆聽';
     for (const id of ['source', 'engine', 'autoService', 'lectureAuto', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
     $('badge').textContent = lectureAutoMode() ? '自動多語互譯' : $('engine').value==='azure' ? 'Azure Speech' : gemini ? ($('engine').value==='precision'?'專業精準':'Gemini 串流') : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
-    status(lectureAutoMode() ? '● 自動偵測發言語言 · 各欄依選定語言同步翻譯' : $('engine').value==='azure' ? '● Azure Speech 辨識中 · Gemini／OpenAI 文字翻譯 · 已啟用自動重新連線' : gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
+    status(lectureAutoMode() ? '● 自動偵測發言語言 · 各欄依選定語言同步翻譯' : $('engine').value==='azure' ? '● Azure Speech 辨識中 · Gemini／OpenAI 文字翻譯 · 已啟用自動重新連線' : gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':($('language').value!=='auto'?'● 指定語言辨識＋暫定串流翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線')) : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
     try {
-      wake = await navigator.wakeLock?.request('screen');
+      const acquiredWake=await navigator.wakeLock?.request('screen');
+      if(currentSession!==session)await acquiredWake?.release().catch(()=>{});else wake=acquiredWake;
     } catch {}
   } catch (e) {
+    if(currentSession!==session)return;
     gemini?.close(); gemini=null; pcm=null;
     geminiSecond?.close();geminiSecond=null;geminiThird?.close();geminiThird=null;
     stream?.getTracks().forEach(t => t.stop());
@@ -1324,10 +1334,12 @@ $('start').onclick = async () => {
     $('meterFill').style.width = '0%';
     status('無法啟動：' + e.message);
   } finally {
+    if(currentSession===session){
     starting = false;
     if(!running)for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
     $('start').disabled = false;
     syncLectureAuto();
+    }
   }
 };
 
@@ -1514,7 +1526,7 @@ function scheduleInterimPreview(record){
   }));
   preview.busy=false;
   if(!preview.closed && record===precisionRecord)scheduleInterimPreview(record);
- },700);
+ },300);
 }
 function handlePrecisionEvent(event,data) {
  if(handleReconnectNotice(event,data,'辨識'))return;
@@ -1523,8 +1535,11 @@ function handlePrecisionEvent(event,data) {
   if(precisionRecord){precisionRecord.state='error';precisionRecord.error='重新連線前的辨識未完成；保留暫定原文供核對。';precisionRecord=null;draw();persist();}return;
  }
  if((event!=='interim' && event!=='final') || !data.text)return;
+ if($('language').value==='zh'&&!lectureAutoMode()&&data.languageCode&&!/^(zh|cmn)(?:-|$)/i.test(data.languageCode)){status('辨識結果與指定中文不符，請確認麥克風來源、音量與背景聲音；這段不送出翻譯。');return;}
  if(!precisionRecord)precisionRecord=newRecord({provider:$('engine').value==='azure'?'azure-speech':'gemini-transcribe',state:'streaming'});
  if(data.languageCode)precisionRecord.language=data.languageCode;
+ // Normalize explicitly selected Mandarin even if the service omits the language code.
+ if($('language').value==='zh'&&!lectureAutoMode())precisionRecord.language='zh-TW';
  precisionRecord.text=toTaiwanTranscript(data.text,precisionRecord.language);
  updateStreamingRow(precisionRecord);
  if(event==='interim')scheduleInterimPreview(precisionRecord);
@@ -1539,7 +1554,7 @@ function handleGeminiEvent(event,data,secondary=false) {
  if(handleReconnectNotice(event,data,secondary===3?'第三語言':secondary?'第二語言':'第一語言'))return;
  if(event==='boundary'){finishLiveRecord(true,secondary);return;}
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
- if((event!=='input' && event!=='output')||!data.text)return;
+ if(!['input','interim','output'].includes(event)||!data.text)return;
  let r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
  if(!r){
    const slot=secondary===3?3:secondary?2:1;
@@ -1563,10 +1578,10 @@ function handleGeminiEvent(event,data,secondary=false) {
      for (const item of records) if(item.secondary && item.liveBatch===liveBatch && item.liveTurn===turn && !item.parentId) item.parentId=r.id;
    }
  }
- if(event==='input') {
-   r._rawInput=(r._rawInput||'')+data.text;
+ if(event==='input'||event==='interim') {
+   if(event==='input'){r._rawInput=(r._rawInput||'')+data.text;r._interimInput='';}else r._interimInput=data.text;
    if(data.languageCode)r._inputLanguage=data.languageCode;
-   r.text=toTaiwanTranscript(r._rawInput,r._inputLanguage||r.language);
+   r.text=toTaiwanTranscript((r._rawInput||'')+(r._interimInput||''),r._inputLanguage||r.language);
  } else {
    r._rawTranslation=(r._rawTranslation||'')+data.text;
    r.translation=isTraditionalChineseTarget(r.target) ? toTaiwanTranscript(r._rawTranslation,'zh') : r._rawTranslation;
@@ -1767,7 +1782,7 @@ if ($('downloadSummary')) {
 // ==========================================
 
 async function switchMode(mode) {
-  if(starting)return;
+  if(starting)await stop();
   if(mode==='conversation' && running)await stop();
   if(mode!=='conversation') stopConvLive();
   stopConvSpeech();
@@ -2313,7 +2328,7 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   for(const [target] of activeTargets)if(!supported.has(target))throw Error('即時對話尚未支援此語言：'+target);
   if(!navigator.mediaDevices?.getUserMedia)throw Error('請使用支援麥克風的 HTTPS 網頁或 localhost');
   // Create/resume audio during the click, before waiting for network setup.
-  const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
+  const audioContext=new (window.AudioContext||window.webkitAudioContext)();convLiveContext=audioContext;
   const resumeTask=audioContext.resume().then(()=>null,error=>error);
   const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
   if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}

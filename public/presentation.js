@@ -3,7 +3,7 @@ import {toTaiwanTranscript} from './traditional.js';
 export function sourceForTarget(record,target){
  const code=String(record._inputLanguage||record.language||'').toLowerCase();
  const source=record.text||record.interim||'';
- if(target==='Traditional Chinese (Taiwan)' && /^(zh|cmn)(?:-|$)/.test(code))return toTaiwanTranscript(source,'zh');
+ if(target==='Traditional Chinese (Taiwan)' && /^(zh|cmn)(?:-|$)/.test(code) && /[\u3400-\u9fff]/.test(source))return toTaiwanTranscript(source,'zh');
  const targets={English:'en',Japanese:'ja',Korean:'ko',Bengali:'bn'};
  if(targets[target] && code.split('-')[0]===targets[target])return source;
  return '';
