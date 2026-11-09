@@ -39,13 +39,20 @@
       </div>
 
       <div class="ctrl-group">
+        <label for="micDevice">收音麥克風</label>
+        <select id="micDevice"><option value="">系統預設麥克風</option></select>
+        <button id="refreshMics" type="button">重新列出麥克風</button>
+        <small id="micInfo" role="status">允許收音後顯示實際裝置；Chrome 語音模式使用瀏覽器預設麥克風，由其語音服務辨識，再交指定 AI 翻譯。</small>
+      </div>
+
+      <div class="ctrl-group">
         <label for="engine">辨識引擎</label>
         <select id="engine">
           <option value="gemini">✨ Gemini 即時翻譯（首選・極速串流）</option>
           <option value="vad">⚡ OpenAI 智慧停頓切段（第二優先）</option>
           <option value="azure">☁ Azure Speech 辨識＋文字翻譯（選用）</option>
           <option value="precision">🩺 Gemini 專業精準模式（醫療詞彙提示）</option>
-          <option value="native">🚀 極速即時模式 (原生語音)</option>
+          <option value="native">🎙 Chrome 語音辨識＋AI 文字翻譯（可用 Gemini）</option>
           <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
         </select>
       </div>

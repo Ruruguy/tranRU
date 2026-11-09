@@ -132,3 +132,13 @@ test('two target clients share PCM but keep transcripts and failure isolated',as
   await clients[0].end();
  }finally{clients.forEach(c=>c.close());}
 });
+test('PCM resampling preserves a 1kHz waveform at native device rates',()=>{
+ for(const rate of [44100,48000]){
+  const converter=new PCMChunks(rate),chunks=[];
+  for(let base=0;base<rate;base+=441){const length=Math.min(441,rate-base);const block=Float32Array.from({length},(_,i)=>.5*Math.sin(2*Math.PI*1000*(base+i)/rate));chunks.push(...converter.push(block));}
+  const tail=converter.tail();if(tail)chunks.push(tail);
+  const bytes=Buffer.concat(chunks.map(c=>Buffer.from(c,'base64')));assert.equal(bytes.length,32000);
+  let crossings=0,sum=0,last=0;for(let i=0;i<bytes.length;i+=2){const x=bytes.readInt16LE(i)/32768;if(last<=0&&x>0)crossings++;sum+=x*x;last=x;}
+  assert.ok(Math.abs(crossings-1000)<=1);assert.ok(Math.abs(Math.sqrt(sum/16000)-Math.SQRT1_2*.5)<.02);
+ }
+});

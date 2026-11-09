@@ -78,6 +78,29 @@ try {
   status('無法連線本機伺服器，請重新啟動。');
 }
 
+// Microphone selection is explicit for PCM capture. Web Speech uses its browser default.
+function syncMicrophoneChoice(){
+ if($('micDevice'))$('micDevice').disabled=running||starting||$('source').value!=='mic'||['native','free'].includes($('engine').value);
+ if($('refreshMics'))$('refreshMics').disabled=running||starting;
+}
+async function refreshMicrophones(){
+ if(!$('micDevice')||!navigator.mediaDevices?.enumerateDevices)return;
+ try{
+  const selected=$('micDevice').value,devices=await navigator.mediaDevices.enumerateDevices();
+  $('micDevice').replaceChildren();
+  const option=document.createElement('option');option.value='';option.textContent='系統預設麥克風';$('micDevice').append(option);
+  for(const [i,device] of devices.filter(d=>d.kind==='audioinput').entries()){
+   const item=document.createElement('option');item.value=device.deviceId;item.textContent=device.label||'麥克風 '+(i+1)+'（授權後顯示名稱）';$('micDevice').append(item);
+  }
+  if([...$('micDevice').options].some(o=>o.value===selected))$('micDevice').value=selected;
+ }catch{if($('micInfo'))$('micInfo').textContent='無法列出裝置，請確認瀏覽器麥克風權限。';}
+ syncMicrophoneChoice();
+}
+if($('refreshMics'))$('refreshMics').onclick=refreshMicrophones;
+$('source').addEventListener('change',syncMicrophoneChoice);
+$('engine').addEventListener('change',syncMicrophoneChoice);
+refreshMicrophones();
+
 // Settings Dialog
 $('settings').onclick = () => $('dialog').showModal();
 function syncLectureAuto() {
@@ -872,6 +895,7 @@ function startNativeSpeech() {
   }
 
   speechRecognizer = new SpeechRecognition();
+  const recognizer=speechRecognizer;
   speechRecognizer.continuous = true;
   speechRecognizer.interimResults = true;
 
@@ -888,7 +912,7 @@ function startNativeSpeech() {
   speechRecognizer.lang = langMap[$('language').value] || 'en-US';
 
   speechRecognizer.onresult = event => {
-    if (!running) return;
+    if (!running || speechRecognizer!==recognizer) return;
     let interimTranscript = '';
     let finalTranscript = '';
 
@@ -906,15 +930,18 @@ function startNativeSpeech() {
     if (interimTranscript) {
       updateAudioReactiveGlow(0.045, 0.12);
       if (!currentNativeRecord) {
-        currentNativeRecord = newRecord({interim: interimTranscript});
+        currentNativeRecord = newRecord({provider:'browser-speech',interim:interimTranscript,text:interimTranscript});
       } else {
         currentNativeRecord.interim = interimTranscript;
+        currentNativeRecord.text = interimTranscript;
         updateStreamingRow(currentNativeRecord);
       }
+      if($('engine').value==='native')scheduleInterimPreview(currentNativeRecord);
     }
 
     if (finalTranscript.trim()) {
       const rec = currentNativeRecord || newRecord({});
+      cancelInterimPreview(rec);
       currentNativeRecord = null;
       rec.text = finalTranscript.trim();
       rec.interim = '';
@@ -934,13 +961,14 @@ function startNativeSpeech() {
   };
 
   speechRecognizer.onerror = event => {
+    if (speechRecognizer!==recognizer)return;
     if (event.error !== 'no-speech') {
       status(`語音辨識注意：${event.error}`);
     }
   };
 
   speechRecognizer.onend = () => {
-    if (running && ($('engine').value === 'native' || $('engine').value === 'free')) {
+    if (speechRecognizer===recognizer && running && ($('engine').value === 'native' || $('engine').value === 'free')) {
       try {
         speechRecognizer.start();
       } catch {}
@@ -1097,6 +1125,7 @@ async function stop() {
     } catch {}
     speechRecognizer = null;
   }
+  if(currentNativeRecord)cancelInterimPreview(currentNativeRecord);
   currentNativeRecord = null;
 
   if (processor) processor.onaudioprocess = null;
@@ -1130,6 +1159,7 @@ async function stop() {
   $('start').textContent = '● 開始聆聽';
   for (const id of ['source', 'engine', 'autoService', 'lectureAuto', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = false;
   syncLectureAuto();
+  syncMicrophoneChoice();
   status('○ 已停止聆聽');
   persist();
 }
@@ -1165,6 +1195,7 @@ $('start').onclick = async () => {
   status('○ 正在取得收音權限，請查看瀏覽器的麥克風提示…');
   for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
   $('start').disabled = true;
+  if(typeof syncMicrophoneChoice==='function')syncMicrophoneChoice();
   openaiBlocked = false;
   const currentSession = ++session;
   liveBatch = crypto.randomUUID();
@@ -1188,10 +1219,12 @@ $('start').onclick = async () => {
     // for a network connection that can consume the browser's user activation.
     const capturedStream = sourceVal === 'tab'
       ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
-      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
+      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true,...($('micDevice')?.value&&!['native','free'].includes($('engine').value)?{deviceId:{exact:$('micDevice').value}}:{})},video:false});
 
     if(currentSession!==session){capturedStream.getTracks().forEach(track=>track.stop());return;}
     stream=capturedStream;
+    if($('micInfo'))$('micInfo').textContent='實際收音：'+(stream.getAudioTracks()[0]?.label||'未提供裝置名稱');
+    if(typeof refreshMicrophones==='function')refreshMicrophones();
     if (!stream.getAudioTracks().length) {
       throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
     }
@@ -1339,6 +1372,7 @@ $('start').onclick = async () => {
     if(!running)for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
     $('start').disabled = false;
     syncLectureAuto();
+    if(typeof syncMicrophoneChoice==='function')syncMicrophoneChoice();
     }
   }
 };
@@ -1525,7 +1559,7 @@ function scheduleInterimPreview(record){
    }catch(error){if(!preview.closed){item.state='error';item.error=error.message;refreshPresentation();}}
   }));
   preview.busy=false;
-  if(!preview.closed && record===precisionRecord)scheduleInterimPreview(record);
+  if(!preview.closed && (record===precisionRecord || record===currentNativeRecord))scheduleInterimPreview(record);
  },300);
 }
 function handlePrecisionEvent(event,data) {
