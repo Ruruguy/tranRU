@@ -127,7 +127,7 @@ test('two target clients share PCM but keep transcripts and failure isolated',as
   controllers[1].enqueue(new TextEncoder().encode('event: output\ndata: {"text":"こんにちは"}\n\n'));
   controllers[1].close();await clients[1].readTask;
   assert.equal(failures[1],1);assert.equal(failures[0],0);assert.equal(clients[0].active,true);
-  assert.deepEqual(events[0],[['output','你好']]);assert.deepEqual(events[1],[['output','こんにちは']]);
+  assert.deepEqual(events[0].filter(([event])=>event==='output'),[['output','你好']]);assert.deepEqual(events[1].filter(([event])=>event==='output'),[['output','こんにちは']]);
   assert.deepEqual(uploads.map(x=>x.id).sort(),['session-0','session-1']);
   await clients[0].end();
  }finally{clients.forEach(c=>c.close());}
@@ -141,4 +141,11 @@ test('PCM resampling preserves a 1kHz waveform at native device rates',()=>{
   let crossings=0,sum=0,last=0;for(let i=0;i<bytes.length;i+=2){const x=bytes.readInt16LE(i)/32768;if(last<=0&&x>0)crossings++;sum+=x*x;last=x;}
   assert.ok(Math.abs(crossings-1000)<=1);assert.ok(Math.abs(Math.sqrt(sum/16000)-Math.SQRT1_2*.5)<.02);
  }
+});
+test('audio sent progress is emitted only after a successful transport response',async()=>{
+ const events=[];let accept;
+ const client=new GeminiLiveClient({token:'test',onEvent:(event)=>events.push(event),onFailure(){},fetcher:async()=>new Promise(resolve=>accept=resolve)});
+ client.active=true;client.id='session';client.send('pcm');assert.equal(events.length,0);
+ accept(new Response('{"ok":true}',{status:200}));await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(events,['audio-sent']);client.close();
 });
