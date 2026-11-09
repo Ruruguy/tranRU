@@ -1807,7 +1807,7 @@ function updateConvLabels() {
   const nameA = optA?.text?.split('·')?.[0]?.trim() || '中文';
   const nameB = optB?.text?.split('·')?.[0]?.trim() || '英文';
   const nameC = optC?.text?.split('·')?.[0]?.trim() || '日文';
-  const nameD = optD?.text?.split('·')?.[0]?.trim() || '韓文';
+  const nameD = optD?.text?.split('·')?.[0]?.trim() || '西班牙語';
 
   if ($('paneHead1') && optA) $('paneHead1').textContent = optA.text;
   if ($('paneHead2') && optB) $('paneHead2').textContent = optB.text;
