@@ -61,7 +61,7 @@ export function createBrowserAPI({fetcher=(...args)=>globalThis.fetch(...args),S
    }
    if(path==='gemini-live'){
     if(!geminiKey)return json({error:'請先儲存自己的 Gemini API 金鑰'},400);
-    if(sessions.size>=4)return json({error:'已有四個 Gemini 翻譯連線，請先停止其他分頁'},409);
+    if(sessions.size>=3)return json({error:'已有三個 Gemini 翻譯連線，請先停止其他分頁'},409);
     const id=crypto.randomUUID();
     return stream((emit,signal)=>new Promise(resolve=>{
      const relay=openGeminiRelay({key:geminiKey,target:data.target||'Traditional Chinese (Taiwan)',mode:data.mode,language:data.language,Socket,emit:(event,value)=>emit(event,{...value,id}),finish:()=>{sessions.delete(id);resolve();}});

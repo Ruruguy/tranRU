@@ -1772,14 +1772,3 @@ body.presenting #lectureView .presentation-live {height:calc(100dvh - 86px);min-
 .presentation-body {overflow-anchor:none;}
 label:has(> input[type=checkbox]) {display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;}
 label > input[type=checkbox] {flex:0 0 auto;width:16px;min-width:16px;margin:0;}
-
-/* Four-language dialogue keeps independent equal quadrants. */
-#convPanes.grid-4 {grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));height:76dvh;min-height:560px;}
-#convPanes.grid-4 > .conv-pane {min-width:0;min-height:0;}
-#convPanes.grid-4 .conv-pane-body {min-height:0;max-height:none;overflow-anchor:none;}
-.conv-pane-head,.conv-pane-foot,.pane-live-stream,.conv-bubble {flex-shrink:0;}
-body.presenting #conversationView {position:fixed;inset:0;padding:10px;box-sizing:border-box;z-index:40;overflow:hidden;}
-body.presenting #conversationView #convPanes {margin:0;width:100%;height:100%;min-height:0;}
-body.presenting #convPanes.grid-4 {grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));}
-body.presenting #convPanes .conv-pane-foot {display:none;}
-body.presenting #convPanes .conv-pane-body {min-height:0;padding:16px 18px 40px;}

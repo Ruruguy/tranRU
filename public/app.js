@@ -21,7 +21,7 @@ const interimPreviews = new WeakMap();
 let liveBatch = '', liveTurnCounts = [0, 0, 0];
 const translationReady = () => $('translationProvider').value === 'gemini' ? geminiConfigured : $('translationProvider').value === 'openai' ? openaiConfigured : (geminiConfigured || openaiConfigured);
 const lectureAutoMode = () => !!$('lectureAuto')?.checked;
-const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured && ((!lectureAutoMode() && $('language').value==='auto') || translationReady()) : $('engine').value === 'vad' ? openaiConfigured && translationReady() : translationReady();
+const canStart = () => $('engine').value === 'azure' ? !!azureKey && !!azureRegion && translationReady() : $('engine').value === 'free' ? true : $('engine').value === 'precision' ? geminiConfigured && translationReady() : $('engine').value === 'gemini' ? geminiConfigured && (!lectureAutoMode() || translationReady()) : $('engine').value === 'vad' ? openaiConfigured && translationReady() : translationReady();
 function preferredEngine({gemini=false,openai=false}={}) {
  return gemini?'gemini':openai?'vad':null;
 }
@@ -77,44 +77,6 @@ try {
 } catch {
   status('無法連線本機伺服器，請重新啟動。');
 }
-
-let speechProgress={frames:0,sent:0,recognized:0,translated:0,started:0,lastUpdate:0,heardSound:false};
-function reportSpeechProgress(stage,value=0){
- if(stage==='reset')speechProgress={frames:0,sent:0,recognized:0,translated:0,started:Date.now(),lastUpdate:0,heardSound:false};
- if(stage==='frame'){speechProgress.frames++;if(value>.007)speechProgress.heardSound=true;}
- if(stage==='sent')speechProgress.sent++;
- if(stage==='recognized')speechProgress.recognized+=value;
- if(stage==='translated')speechProgress.translated+=value;
- const el=$('speechProgress');if(!el)return;
- if(stage==='frame'&&Date.now()-speechProgress.lastUpdate<1000)return;
- speechProgress.lastUpdate=Date.now();
- const native=['native','free','azure'].includes($('engine').value);
- el.textContent=(speechProgress.frames?'收音已有資料':'等待收音資料')+' · '+(native?($('engine').value==='azure'?'Azure 語音辨識':'瀏覽器語音辨識'):('音訊已送出 '+speechProgress.sent+' 段'))+' · 辨識回傳 '+speechProgress.recognized+' 字 · 翻譯回傳 '+speechProgress.translated+' 字';
- if(speechProgress.heardSound&&!speechProgress.recognized&&Date.now()-speechProgress.started>12000)el.textContent+='。有音量但尚未收到辨識文字；請確認收音裝置，或換辨識引擎測試。';
-}
-
-// Microphone selection is explicit for PCM capture. Web Speech uses its browser default.
-function syncMicrophoneChoice(){
- if($('micDevice'))$('micDevice').disabled=running||starting||$('source').value!=='mic'||['native','free'].includes($('engine').value);
- if($('refreshMics'))$('refreshMics').disabled=running||starting;
-}
-async function refreshMicrophones(){
- if(!$('micDevice')||!navigator.mediaDevices?.enumerateDevices)return;
- try{
-  const selected=$('micDevice').value,devices=await navigator.mediaDevices.enumerateDevices();
-  $('micDevice').replaceChildren();
-  const option=document.createElement('option');option.value='';option.textContent='系統預設麥克風';$('micDevice').append(option);
-  for(const [i,device] of devices.filter(d=>d.kind==='audioinput').entries()){
-   const item=document.createElement('option');item.value=device.deviceId;item.textContent=device.label||'麥克風 '+(i+1)+'（授權後顯示名稱）';$('micDevice').append(item);
-  }
-  if([...$('micDevice').options].some(o=>o.value===selected))$('micDevice').value=selected;
- }catch{if($('micInfo'))$('micInfo').textContent='無法列出裝置，請確認瀏覽器麥克風權限。';}
- syncMicrophoneChoice();
-}
-if($('refreshMics'))$('refreshMics').onclick=refreshMicrophones;
-$('source').addEventListener('change',syncMicrophoneChoice);
-$('engine').addEventListener('change',syncMicrophoneChoice);
-refreshMicrophones();
 
 // Settings Dialog
 $('settings').onclick = () => $('dialog').showModal();
@@ -825,7 +787,6 @@ async function streamRecord(record, endpoint = 'audio-stream', payload = null) {
       if(event === 'error')throw Error(data.error || '串流處理異常');
       if(event === 'stt'){record.text = toTaiwanTranscript(data.text || '', data.languageCode||record.language);translateOtherLanguages(record);}
       if(event === 'delta'){
-        if(typeof reportSpeechProgress==='function')reportSpeechProgress('translated',(data.delta||'').length);
         translationRaw += data.delta || '';
         record.translation = isTraditionalChineseTarget(record.target) ? toTaiwanTranscript(translationRaw,'zh') : translationRaw;
       }
@@ -911,7 +872,6 @@ function startNativeSpeech() {
   }
 
   speechRecognizer = new SpeechRecognition();
-  const recognizer=speechRecognizer;
   speechRecognizer.continuous = true;
   speechRecognizer.interimResults = true;
 
@@ -928,7 +888,7 @@ function startNativeSpeech() {
   speechRecognizer.lang = langMap[$('language').value] || 'en-US';
 
   speechRecognizer.onresult = event => {
-    if (!running || speechRecognizer!==recognizer) return;
+    if (!running) return;
     let interimTranscript = '';
     let finalTranscript = '';
 
@@ -941,24 +901,20 @@ function startNativeSpeech() {
       }
     }
 
-    if(typeof reportSpeechProgress==='function')reportSpeechProgress('recognized',interimTranscript.length+finalTranscript.length);
     interimTranscript = toTaiwanTranscript(interimTranscript, $('language').value);
     finalTranscript = toTaiwanTranscript(finalTranscript, $('language').value);
     if (interimTranscript) {
       updateAudioReactiveGlow(0.045, 0.12);
       if (!currentNativeRecord) {
-        currentNativeRecord = newRecord({provider:'browser-speech',interim:interimTranscript,text:interimTranscript});
+        currentNativeRecord = newRecord({interim: interimTranscript});
       } else {
         currentNativeRecord.interim = interimTranscript;
-        currentNativeRecord.text = interimTranscript;
         updateStreamingRow(currentNativeRecord);
       }
-      if($('engine').value==='native')scheduleInterimPreview(currentNativeRecord);
     }
 
     if (finalTranscript.trim()) {
       const rec = currentNativeRecord || newRecord({});
-      cancelInterimPreview(rec);
       currentNativeRecord = null;
       rec.text = finalTranscript.trim();
       rec.interim = '';
@@ -978,14 +934,13 @@ function startNativeSpeech() {
   };
 
   speechRecognizer.onerror = event => {
-    if (speechRecognizer!==recognizer)return;
     if (event.error !== 'no-speech') {
       status(`語音辨識注意：${event.error}`);
     }
   };
 
   speechRecognizer.onend = () => {
-    if (speechRecognizer===recognizer && running && ($('engine').value === 'native' || $('engine').value === 'free')) {
+    if (running && ($('engine').value === 'native' || $('engine').value === 'free')) {
       try {
         speechRecognizer.start();
       } catch {}
@@ -1127,7 +1082,6 @@ async function translateFreeRecord(record) {
 
 // Stop Everything
 async function stop() {
-  starting=false;
   running = false;
   if(precisionRecord)cancelInterimPreview(precisionRecord);
   session++;
@@ -1142,7 +1096,6 @@ async function stop() {
     } catch {}
     speechRecognizer = null;
   }
-  if(currentNativeRecord)cancelInterimPreview(currentNativeRecord);
   currentNativeRecord = null;
 
   if (processor) processor.onaudioprocess = null;
@@ -1176,7 +1129,6 @@ async function stop() {
   $('start').textContent = '● 開始聆聽';
   for (const id of ['source', 'engine', 'autoService', 'lectureAuto', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = false;
   syncLectureAuto();
-  syncMicrophoneChoice();
   status('○ 已停止聆聽');
   persist();
 }
@@ -1209,11 +1161,9 @@ $('start').onclick = async () => {
   if ($('dualTranslation').checked && $('tripleTranslation').checked && [$('target').value,$('secondTarget').value].includes($('thirdTarget').value)) {status('請選擇三種不同的目標語言');return;}
   if($('engine').value==='azure'){try{validateAzureConfig(azureKey,azureRegion,$('language').value);}catch(e){status(e.message);return;}}
   starting = true;
-  if(typeof reportSpeechProgress==='function')reportSpeechProgress('reset');
   status('○ 正在取得收音權限，請查看瀏覽器的麥克風提示…');
   for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=true;
   $('start').disabled = true;
-  if(typeof syncMicrophoneChoice==='function')syncMicrophoneChoice();
   openaiBlocked = false;
   const currentSession = ++session;
   liveBatch = crypto.randomUUID();
@@ -1235,21 +1185,16 @@ $('start').onclick = async () => {
 
     // Screen sharing must be requested directly from the click, before waiting
     // for a network connection that can consume the browser's user activation.
-    const capturedStream = sourceVal === 'tab'
+    stream = sourceVal === 'tab'
       ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: true})
-      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:true,noiseSuppression:true,autoGainControl:true,...($('micDevice')?.value&&!['native','free'].includes($('engine').value)?{deviceId:{exact:$('micDevice').value}}:{})},video:false});
+      : await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}, video: false});
 
-    if(currentSession!==session){capturedStream.getTracks().forEach(track=>track.stop());return;}
-    stream=capturedStream;
-    if($('micInfo'))$('micInfo').textContent='實際收音：'+(stream.getAudioTracks()[0]?.label||'未提供裝置名稱');
-    if(typeof refreshMicrophones==='function')refreshMicrophones();
     if (!stream.getAudioTracks().length) {
       throw new Error('未取得音訊軌道。請確認已選取有聲音的分頁並勾選「分享分頁音訊」。');
     }
 
     if ($('autoService')?.checked) {
       const response=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token},body:JSON.stringify({translationProvider:'auto'}),signal:AbortSignal.timeout(8000)});
-      if(currentSession!==session)return;
       if(!response.ok)throw Error('無法套用服務優先順序，請重新儲存服務設定');
     }
     if ($('engine').value === 'azure') {
@@ -1261,30 +1206,26 @@ $('start').onclick = async () => {
     }
     if (['gemini','precision'].includes($('engine').value)) {
       status('○ 正在連線 Gemini…');
-      const precision=$('engine').value==='precision'||lectureAutoMode()||$('language').value!=='auto';
-      const pendingGemini = new GeminiLiveClient({token,onEvent:precision?handlePrecisionEvent:handleGeminiEvent,onFailure:handleGeminiFailure});gemini=pendingGemini;
-      try {await pendingGemini.connect($('target').value,precision?{mode:'transcribe',language:$('language').value}:{});}
-      catch(e) {if(currentSession!==session)return;pendingGemini.close();gemini=null;if($('fallback').checked && openaiConfigured && !openaiBlocked){$('engine').value='vad';fallbackReason=e.message;}else throw e;}
+      const precision=$('engine').value==='precision'||lectureAutoMode();
+      gemini = new GeminiLiveClient({token,onEvent:precision?handlePrecisionEvent:handleGeminiEvent,onFailure:handleGeminiFailure});
+      try {await gemini.connect($('target').value,precision?{mode:'transcribe',language:$('language').value}:{});}
+      catch(e) {gemini.close();gemini=null;if($('fallback').checked && openaiConfigured && !openaiBlocked){$('engine').value='vad';fallbackReason=e.message;}else throw e;}
     }
-    if(currentSession!==session)return;
-    if(gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('language').value==='auto' && $('dualTranslation').checked){
+    if(gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('dualTranslation').checked){
       $('secondStatus').textContent='正在連線第二語言…';
       geminiSecond=new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,true),onFailure:handleSecondFailure});
       try {await geminiSecond.connect($('secondTarget').value);$('secondStatus').textContent='第二語言已連線，等待音訊';}
-      catch(e){if(currentSession!==session)return;geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
+      catch(e){geminiSecond?.close();geminiSecond=null;$('secondStatus').textContent='第二語言連線失敗（第一語言可繼續）：'+e.message;}
     }
-    if(currentSession!==session)return;
-    if (gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('language').value==='auto' && $('dualTranslation').checked && $('tripleTranslation').checked) {
+    if (gemini && $('engine').value==='gemini' && !lectureAutoMode() && $('dualTranslation').checked && $('tripleTranslation').checked) {
       $('thirdStatus').textContent='正在連線第三語言…';
       geminiThird = new GeminiLiveClient({token,onEvent:(event,data)=>handleGeminiEvent(event,data,3),onFailure:error=>handleThirdFailure(error)});
       try { await geminiThird.connect($('thirdTarget').value); $('thirdStatus').textContent='第三語言已連線，等待音訊'; }
-      catch(e) {if(currentSession!==session)return; geminiThird?.close();geminiThird=null; $('thirdStatus').textContent='第三語言連線失敗：'+e.message; }
+      catch(e) { geminiThird?.close();geminiThird=null; $('thirdStatus').textContent='第三語言連線失敗：'+e.message; }
     }
-    if(currentSession!==session)return;
     // AudioContext for VU Meter & VAD
     ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate:16000});
     await ctx.resume();
-    if(currentSession!==session)return;
     if(gemini)pcm=new PCMChunks(ctx.sampleRate);
     sourceNode = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
     processor = ctx.createScriptProcessor(2048, 1, 1);
@@ -1323,7 +1264,6 @@ $('start').onclick = async () => {
       }
       const rms = Math.sqrt(sum / copy.length);
       const zcr = zeroCrossings / copy.length;
-      if(typeof reportSpeechProgress==='function')reportSpeechProgress('frame',rms);
       const meterPercent = Math.min(100, Math.round(rms * 450));
       $('meterFill').style.width = meterPercent + '%';
 
@@ -1368,14 +1308,12 @@ $('start').onclick = async () => {
     $('start').textContent = '■ 停止聆聽';
     for (const id of ['source', 'engine', 'autoService', 'lectureAuto', 'language', 'target', 'dualTranslation', 'secondTarget', 'tripleTranslation', 'thirdTarget']) $(id).disabled = true;
     $('badge').textContent = lectureAutoMode() ? '自動多語互譯' : $('engine').value==='azure' ? 'Azure Speech' : gemini ? ($('engine').value==='precision'?'專業精準':'Gemini 串流') : $('engine').value === 'free' ? '免金鑰模式' : 'OpenAI 模式';
-    status(lectureAutoMode() ? '● 自動偵測發言語言 · 各欄依選定語言同步翻譯' : $('engine').value==='azure' ? '● Azure Speech 辨識中 · Gemini／OpenAI 文字翻譯 · 已啟用自動重新連線' : gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':($('language').value!=='auto'?'● 指定語言辨識＋暫定串流翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線')) : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
+    status(lectureAutoMode() ? '● 自動偵測發言語言 · 各欄依選定語言同步翻譯' : $('engine').value==='azure' ? '● Azure Speech 辨識中 · Gemini／OpenAI 文字翻譯 · 已啟用自動重新連線' : gemini ? ($('engine').value==='precision'?'● 專業詞彙辨識中，完整語句後開始翻譯 · 已啟用自動重新連線':'● Gemini 即時翻譯 · 已啟用自動重新連線') : $('engine').value === 'free' ? '● 免金鑰即時模式 · 語音由瀏覽器即時辨識' : fallbackReason ? '● Gemini 無法啟動，已切換 OpenAI：'+fallbackReason : '● OpenAI 即時口譯');
 
     try {
-      const acquiredWake=await navigator.wakeLock?.request('screen');
-      if(currentSession!==session)await acquiredWake?.release().catch(()=>{});else wake=acquiredWake;
+      wake = await navigator.wakeLock?.request('screen');
     } catch {}
   } catch (e) {
-    if(currentSession!==session)return;
     gemini?.close(); gemini=null; pcm=null;
     geminiSecond?.close();geminiSecond=null;geminiThird?.close();geminiThird=null;
     stream?.getTracks().forEach(t => t.stop());
@@ -1386,13 +1324,10 @@ $('start').onclick = async () => {
     $('meterFill').style.width = '0%';
     status('無法啟動：' + e.message);
   } finally {
-    if(currentSession===session){
     starting = false;
     if(!running)for(const id of ['source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget'])$(id).disabled=false;
     $('start').disabled = false;
     syncLectureAuto();
-    if(typeof syncMicrophoneChoice==='function')syncMicrophoneChoice();
-    }
   }
 };
 
@@ -1568,7 +1503,7 @@ function scheduleInterimPreview(record){
     const parser=new SSEParser((event,data)=>{
      if(preview.closed)return;
      if(event==='error')throw Error(data.error||'暫定翻譯失敗');
-     if(event==='delta'){raw+=data.delta||'';if(typeof reportSpeechProgress==='function')reportSpeechProgress('translated',(data.delta||'').length);}
+     if(event==='delta')raw+=data.delta||'';
      if(event==='done'){complete=true;item.state='done';if(data.translation!==undefined)raw=data.translation;}
      item.translation=isTraditionalChineseTarget(item.target)?toTaiwanTranscript(raw,'zh'):raw;
      refreshPresentation();
@@ -1578,23 +1513,18 @@ function scheduleInterimPreview(record){
    }catch(error){if(!preview.closed){item.state='error';item.error=error.message;refreshPresentation();}}
   }));
   preview.busy=false;
-  if(!preview.closed && (record===precisionRecord || record===currentNativeRecord))scheduleInterimPreview(record);
- },300);
+  if(!preview.closed && record===precisionRecord)scheduleInterimPreview(record);
+ },700);
 }
 function handlePrecisionEvent(event,data) {
- if(event==='audio-sent'){if(typeof reportSpeechProgress==='function')reportSpeechProgress('sent');return;}
  if(handleReconnectNotice(event,data,'辨識'))return;
  if(event==='boundary'){
   if(precisionRecord)cancelInterimPreview(precisionRecord);
   if(precisionRecord){precisionRecord.state='error';precisionRecord.error='重新連線前的辨識未完成；保留暫定原文供核對。';precisionRecord=null;draw();persist();}return;
  }
  if((event!=='interim' && event!=='final') || !data.text)return;
- if(typeof reportSpeechProgress==='function')reportSpeechProgress('recognized',data.text.length);
- if($('language').value==='zh'&&!lectureAutoMode()&&data.languageCode&&!/^(zh|cmn)(?:-|$)/i.test(data.languageCode)){status('辨識結果與指定中文不符，請確認麥克風來源、音量與背景聲音；這段不送出翻譯。');return;}
  if(!precisionRecord)precisionRecord=newRecord({provider:$('engine').value==='azure'?'azure-speech':'gemini-transcribe',state:'streaming'});
  if(data.languageCode)precisionRecord.language=data.languageCode;
- // Normalize explicitly selected Mandarin even if the service omits the language code.
- if($('language').value==='zh'&&!lectureAutoMode())precisionRecord.language='zh-TW';
  precisionRecord.text=toTaiwanTranscript(data.text,precisionRecord.language);
  updateStreamingRow(precisionRecord);
  if(event==='interim')scheduleInterimPreview(precisionRecord);
@@ -1606,12 +1536,10 @@ function handlePrecisionEvent(event,data) {
  }
 }
 function handleGeminiEvent(event,data,secondary=false) {
- if(event==='audio-sent'){if(!secondary&&typeof reportSpeechProgress==='function')reportSpeechProgress('sent');return;}
  if(handleReconnectNotice(event,data,secondary===3?'第三語言':secondary?'第二語言':'第一語言'))return;
  if(event==='boundary'){finishLiveRecord(true,secondary);return;}
  if(event==='turn'){finishLiveRecord(false,secondary);return;}
- if(!['input','interim','output'].includes(event)||!data.text)return;
- if(typeof reportSpeechProgress==='function')reportSpeechProgress(event==='output'?'translated':'recognized',data.text.length);
+ if((event!=='input' && event!=='output')||!data.text)return;
  let r=secondary===3?thirdLiveRecord:secondary?secondLiveRecord:liveRecord;
  if(!r){
    const slot=secondary===3?3:secondary?2:1;
@@ -1635,10 +1563,10 @@ function handleGeminiEvent(event,data,secondary=false) {
      for (const item of records) if(item.secondary && item.liveBatch===liveBatch && item.liveTurn===turn && !item.parentId) item.parentId=r.id;
    }
  }
- if(event==='input'||event==='interim') {
-   if(event==='input'){r._rawInput=(r._rawInput||'')+data.text;r._interimInput='';}else r._interimInput=data.text;
+ if(event==='input') {
+   r._rawInput=(r._rawInput||'')+data.text;
    if(data.languageCode)r._inputLanguage=data.languageCode;
-   r.text=toTaiwanTranscript((r._rawInput||'')+(r._interimInput||''),r._inputLanguage||r.language);
+   r.text=toTaiwanTranscript(r._rawInput,r._inputLanguage||r.language);
  } else {
    r._rawTranslation=(r._rawTranslation||'')+data.text;
    r.translation=isTraditionalChineseTarget(r.target) ? toTaiwanTranscript(r._rawTranslation,'zh') : r._rawTranslation;
@@ -1839,7 +1767,7 @@ if ($('downloadSummary')) {
 // ==========================================
 
 async function switchMode(mode) {
-  if(starting)await stop();
+  if(starting)return;
   if(mode==='conversation' && running)await stop();
   if(mode!=='conversation') stopConvLive();
   stopConvSpeech();
@@ -2295,10 +2223,10 @@ if ($('convExport')) {
 
 window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?.cancel();});
 
-// Up to four independent translation sessions share one microphone. Live Translate
+// Three independent translation sessions share one microphone. Live Translate
 // supplies language detection, but does not identify individual speakers.
-let convLiveGeneration=0, convLiveRunning=false, convLiveStarting=false, convLiveStream=null, convLiveContext=null;
-let convLiveNodes=[], convLiveClients=[], convLiveStartTimer=null;
+let convLiveGeneration=0, convLiveRunning=false, convLiveStream=null, convLiveContext=null;
+let convLiveNodes=[], convLiveClients=[];
 const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
 function appendConvLive(id,text,replace=false) {
  const el=$(id); if(!el)return;
@@ -2322,8 +2250,7 @@ function resetConvLiveText(){
  }
 }
 function stopConvLive(message='○ 已停止聆聽'){
- ++convLiveGeneration;convLiveRunning=false;convLiveStarting=false;
- clearTimeout(convLiveStartTimer);convLiveStartTimer=null;
+ ++convLiveGeneration;convLiveRunning=false;
  for(const client of convLiveClients)client.close();convLiveClients=[];
  for(const node of convLiveNodes){try{node.disconnect();}catch{}}convLiveNodes=[];
  convLiveStream?.getTracks().forEach(track=>track.stop());convLiveStream=null;
@@ -2346,21 +2273,22 @@ function stopConvLive(message='○ 已停止聆聽'){
 }
 if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
  if(convLiveRunning){stopConvLive();return;}
- if(convLiveStarting)return;
  if(!geminiConfigured){
   $('dialog').showModal();
   if($('convLiveStatus')) $('convLiveStatus').textContent='自動辨識多語對話需要 Gemini API 金鑰；免金鑰僅供指定語言的手動輸入';
   return;
  }
  stopConvSpeech();window.speechSynthesis?.cancel();
- convLiveStarting=true;
  const generation=++convLiveGeneration;
- convLiveStartTimer=setTimeout(()=>{if(generation===convLiveGeneration)stopConvLive('啟動逾時：請確認麥克風權限、網路與 Gemini 額度，再重新開始');},30000);
  for(const el of document.querySelectorAll?.('#conversationView select')||[])el.disabled=true;
  if($('convSwapLangs'))$('convSwapLangs').disabled=true;
  $('convLiveStart').disabled=true;
  if($('convLiveStatus')) $('convLiveStatus').textContent='正在取得麥克風授權並建立自動口譯…';
  try{
+  const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
+  convLiveStream=captured;
+
   // 動態語言目標設定（相容 conversation-live.test.mjs 預設三語）
   const dynamicTargets = (() => {
    if (!$('convLangCount')) return convLiveTargets;
@@ -2375,24 +2303,12 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
     [getTarget('convLangB', 'English'), 'convLiveEn', 2],
    ];
    if (count >= 3) list.push([getTarget('convLangC', 'Japanese'), 'convLiveJa', 3]);
-   if (count === 4) list.push([getTarget('convLangD', 'Bengali'), 'convLiveKo', 4]);
+   if (count === 4) list.push([getTarget('convLangD', 'Korean'), 'convLiveKo', 4]);
    return list;
   })();
 
   const activeTargets = dynamicTargets;
   if(new Set(activeTargets.map(x=>x[0])).size!==activeTargets.length)throw Error('請為各欄選擇不同的語言');
-  const supported=new Set(['Traditional Chinese (Taiwan)','English','Japanese','Bengali']);
-  for(const [target] of activeTargets)if(!supported.has(target))throw Error('即時對話尚未支援此語言：'+target);
-  if(!navigator.mediaDevices?.getUserMedia)throw Error('請使用支援麥克風的 HTTPS 網頁或 localhost');
-  // Create/resume audio during the click, before waiting for network setup.
-  const audioContext=new (window.AudioContext||window.webkitAudioContext)();convLiveContext=audioContext;
-  const resumeTask=audioContext.resume().then(()=>null,error=>error);
-  const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
-  if(generation!==convLiveGeneration){captured.getTracks().forEach(t=>t.stop());return;}
-  convLiveStream=captured;
-  const resumeError=await resumeTask;if(resumeError)throw resumeError;
-  if(!captured.getAudioTracks().length)throw Error('麥克風未提供音訊軌道，請檢查瀏覽器及系統麥克風權限');
-
   const clients=activeTargets.map(([target,id,paneNum],index)=>{
    let turnBase=null,sourceText='',sourceDraft='',sourceLanguage='',directSource=false;
    return new GeminiLiveClient({token,onEvent:(event,data)=>{
@@ -2441,14 +2357,13 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   convLiveClients=clients;
   await Promise.all(clients.map((client,index)=>client.connect(activeTargets[index][0])));
   if(generation!==convLiveGeneration)return;
-  if(audioContext.state==='suspended'){await audioContext.resume();if(generation!==convLiveGeneration)return;}
-  if(audioContext.state && audioContext.state!=='running')throw Error('音訊處理尚未啟動，請重新按開始並允許麥克風');
+  const audioContext=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});convLiveContext=audioContext;
+  await audioContext.resume();if(generation!==convLiveGeneration)return;
   const input=audioContext.createMediaStreamSource(captured),processor=audioContext.createScriptProcessor(2048,1,1),sink=audioContext.createGain(),chunks=new PCMChunks(audioContext.sampleRate);
   convLiveNodes=[input,processor,sink];sink.gain.value=0;input.connect(processor);processor.connect(sink);sink.connect(audioContext.destination);
   processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;for(const chunk of chunks.push(e.inputBuffer.getChannelData(0)))for(const client of clients)client.send(chunk);};
   for(const track of captured.getAudioTracks())track.onended=()=>{if(generation===convLiveGeneration)stopConvLive('麥克風已停止');};
-  clearTimeout(convLiveStartTimer);convLiveStartTimer=null;
-  convLiveRunning=true;convLiveStarting=false;
+  convLiveRunning=true;
   $('convPanes')?.classList?.add('listening');
   for(let p=1; p<=activeTargets.length; p++){
    const s = $('paneState' + p);
