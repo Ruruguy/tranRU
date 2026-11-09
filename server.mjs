@@ -355,7 +355,7 @@ const handle = async (req, res) => {
 
       if (req.url === '/api/gemini-live') {
         if (!geminiKey) return send(400, {error: '請先設定 Gemini API 金鑰'});
-        if (liveSessions.size >= 4) return send(409, {error: '已有四個 Gemini 翻譯連線，請先停止其他分頁'});
+        if (liveSessions.size >= 3) return send(409, {error: '已有三個 Gemini 翻譯連線，請先停止其他分頁'});
         const id = randomBytes(20).toString('hex');
         res.writeHead(200, {'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store','X-Accel-Buffering':'no'});
         res.flushHeaders();

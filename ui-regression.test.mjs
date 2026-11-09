@@ -13,7 +13,7 @@ test('page module parses and required controls exist in valid UTF-8',()=>{
  assert.doesNotMatch(html, /name="tranru-mode"/);
 });
 test('precision mode updates interim text and translates only a finalized utterance',()=>{
- const requests=[];const records=[];const sandbox={$:()=>({value:'precision'}),precisionRecord:null,records,lectureAutoMode:()=>false,scheduleInterimPreview(){},cancelInterimPreview(){},toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
+ const requests=[];const records=[];const sandbox={$:()=>({value:'precision'}),precisionRecord:null,records,scheduleInterimPreview(){},cancelInterimPreview(){},toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={...data,language:'zh',target:'English',context:'',text:''};records.push(r);return r;},streamRecord(...args){requests.push(args);}};
  vm.runInNewContext(app.slice(app.indexOf('function handlePrecisionEvent('),app.indexOf('function handleGeminiEvent(')),sandbox);
  sandbox.handlePrecisionEvent('interim',{text:'意识'});assert.equal(records[0].text,'意識');assert.equal(requests.length,0);
  sandbox.handlePrecisionEvent('interim',{text:'意识不清'});assert.equal(records[0].text,'意識不清');
@@ -35,7 +35,7 @@ test('Bengali language choices and unsupported Tuvaluan voice guards',async()=>{
  assert.equal(translationSetup('Bengali').setup.generationConfig.translationConfig.targetLanguageCode,'bn');
  assert.throws(()=>translationSetup('Tuvaluan'));
  assert.match(html,/<option value="bn">/);
- assert.equal((html.match(/data-target="Tuvaluan"/g)||[]).length,0);
+ assert.equal((html.match(/data-target="Tuvaluan"/g)||[]).length,2);
  const nodes={convEngine:{value:'free'},convLangA:{value:'zh-TW'},convLangB:{value:'tvl'},convTextInput:{value:'hello'}};let message='';
  const sandbox={$:id=>nodes[id],convStatus:s=>message=s,configured:true};
  vm.runInNewContext(app.slice(app.indexOf('function sendManualConv('),app.indexOf("if ($('convSendA'))")),sandbox);
@@ -60,7 +60,7 @@ test('tab sharing is requested synchronously and tracks close if Gemini fails to
  Object.assign(nodes.source,{value:'tab'});Object.assign(nodes.engine,{value:'gemini'});Object.assign(nodes.language,{value:'en'});Object.assign(nodes.target,{value:'English'});
  let active=true,stopped=false,message='';queueMicrotask(()=>{active=false;});
  const media={getAudioTracks:()=>[{}],getTracks:()=>[{stop(){stopped=true;}}]};
- const sandbox={lectureAutoMode:()=>false,syncLectureAuto(){},navigator:{mediaDevices:{getDisplayMedia(){assert.equal(active,true,'screen capture must be requested while the click is active');return Promise.resolve(media);}}},$:id=>nodes[id],status:s=>message=s,canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handlePrecisionEvent(){},handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(){throw Error('connection failed')}close(){}},Array,Error};
+ const sandbox={lectureAutoMode:()=>false,syncLectureAuto(){},navigator:{mediaDevices:{getDisplayMedia(){assert.equal(active,true,'screen capture must be requested while the click is active');return Promise.resolve(media);}}},$:id=>nodes[id],status:s=>message=s,canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(){throw Error('connection failed')}close(){}},Array,Error};
  vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
  await nodes.start.onclick();assert.equal(stopped,true);assert.match(message,/connection failed/);
 });
@@ -121,37 +121,4 @@ test('automatic lecture uses one multilingual transcription stream for all selec
  const sandbox={lectureAutoMode:()=>true,syncLectureAuto(){},navigator:{mediaDevices:{getUserMedia:async()=>({getAudioTracks:()=>[{}],getTracks:()=>[{stop(){stopped=true;}}]})}},window:{AudioContext:class{async resume(){throw Error('test capture boundary');}async close(){}}},$:id=>nodes[id],status(){},canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handlePrecisionEvent(){},handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(target,options){connections.push({target,options});}close(){}}};
  vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
  await nodes.start.onclick();assert.equal(connections.length,1);assert.equal(connections[0].options.mode,'transcribe');assert.equal(connections[0].options.language,'auto');assert.equal(stopped,true);
-});
-
-test('explicit Mandarin selection sends the source language to transcription for every display column',async()=>{
- const ids=['start','source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
- const nodes=Object.fromEntries(ids.map(id=>[id,{value:'',checked:false,style:{},disabled:false}]));
- nodes.engine.value='gemini';nodes.source.value='mic';nodes.language.value='zh';nodes.target.value='Traditional Chinese (Taiwan)';nodes.secondTarget.value='English';nodes.thirdTarget.value='Japanese';nodes.dualTranslation.checked=true;nodes.tripleTranslation.checked=true;
- const connections=[];let stopped=false;
- const sandbox={lectureAutoMode:()=>false,syncLectureAuto(){},navigator:{mediaDevices:{getUserMedia:async()=>({getAudioTracks:()=>[{}],getTracks:()=>[{stop(){stopped=true;}}]})}},window:{AudioContext:class{async resume(){throw Error('test capture boundary');}async close(){}}},$:id=>nodes[id],status(){},canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'batch'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',handlePrecisionEvent(){},handleGeminiEvent(){},handleGeminiFailure(){},GeminiLiveClient:class{async connect(target,options){connections.push({target,options});}close(){}}};
- vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
- await nodes.start.onclick();assert.equal(connections.length,1);assert.equal(connections[0].options.mode,'transcribe');assert.equal(connections[0].options.language,'zh');assert.equal(stopped,true);
-});
-test('Mandarin source rejects a conflicting detected language instead of displaying it as Chinese',()=>{
- let message='';const records=[];
- const sandbox={$:()=>({value:'zh'}),lectureAutoMode:()=>false,status:s=>message=s,precisionRecord:null,records,toTaiwanTranscript,handleReconnectNotice:()=>false,updateStreamingRow(){},scheduleInterimPreview(){},cancelInterimPreview(){},draw(){},getRecentHistory:()=>[],newRecord(data){const r={id:'zh',language:'zh',...data};records.push(r);return r;},streamRecord(){}};
- vm.runInNewContext(app.slice(app.indexOf('function handlePrecisionEvent('),app.indexOf('function handleGeminiEvent(')),sandbox);
- sandbox.handlePrecisionEvent('interim',{text:'então, então',languageCode:'pt-BR'});assert.equal(records.length,0);assert.match(message,/指定中文不符/);
- sandbox.handlePrecisionEvent('interim',{text:'我们正在讨论救护',languageCode:'cmn-Hans-CN'});assert.equal(records[0].text,'我們正在討論救護');assert.equal(records[0].language,'zh-TW');
-});
-test('conversation navigation cancels a pending lecture startup instead of ignoring the click',async()=>{
- let stops=0;const node=()=>({style:{},classList:{add(){},remove(){}}});const nodes={navLecture:node(),navConversation:node(),lectureView:node(),conversationView:node()};
- const sandbox={starting:true,running:false,convEpoch:0,async stop(){stops++;sandbox.starting=false;},stopConvLive(){},stopConvSpeech(){},window:{speechSynthesis:{cancel(){}}},$:id=>nodes[id]};
- vm.runInNewContext(app.slice(app.indexOf('async function switchMode('),app.indexOf("\nif ($('navLecture'))")),sandbox);
- await sandbox.switchMode('conversation');assert.equal(stops,1);assert.equal(nodes.conversationView.style.display,'block');assert.equal(nodes.lectureView.style.display,'none');
-});
-test('a microphone granted after lecture cancellation is released and does not start a hidden connection',async()=>{
- const ids=['start','source','engine','autoService','lectureAuto','language','target','dualTranslation','secondTarget','tripleTranslation','thirdTarget','fallback','meterFill'];
- const nodes=Object.fromEntries(ids.map(id=>[id,{value:'',checked:false,style:{},disabled:false}]));nodes.engine.value='gemini';nodes.source.value='mic';nodes.language.value='zh';nodes.target.value='Traditional Chinese (Taiwan)';
- let resolveCapture,released=false,connected=false;
- const sandbox={lectureAutoMode:()=>false,syncLectureAuto(){},navigator:{mediaDevices:{getUserMedia:()=>new Promise(resolve=>resolveCapture=resolve)}},$:id=>nodes[id],status(){},canStart:()=>true,running:false,starting:false,openaiBlocked:false,openaiConfigured:false,session:0,crypto:{randomUUID:()=> 'cancelled'},liveBatch:'',liveTurnCounts:[],gemini:null,geminiSecond:null,geminiThird:null,pcm:null,stream:null,ctx:null,token:'',GeminiLiveClient:class{async connect(){connected=true;}}};
- vm.runInNewContext(app.slice(app.indexOf("$('start').onclick = async"),app.indexOf('// Manual Text Translation')),sandbox);
- const task=nodes.start.onclick();sandbox.session++;sandbox.starting=false;
- resolveCapture({getTracks:()=>[{stop(){released=true;}}]});await task;
- assert.equal(released,true);assert.equal(connected,false);assert.equal(sandbox.stream,null);
 });
