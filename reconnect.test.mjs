@@ -37,15 +37,18 @@ test('GoAway coalesces and does not open overlapping replacement sessions',async
  let release;const f=fixture({end:()=>new Promise(r=>release=r)});
  try{await f.client.connect('English');f.instances[0].onEvent('rotate',{});f.instances[0].onEvent('rotate',{});await tick();assert.equal(f.instances.length,1);release();await f.client.recovery;assert.equal(f.instances.length,2);}finally{f.client.close();}
 });
-test('transient failures retry with bounded attempts, but quota and denied keys do not',async()=>{
+test('transient failures keep retrying until manual stop, but quota and denied keys do not',async()=>{
  const f=fixture({connect:(_,n)=>{if(n===2)throw Error('temporary network failure');}});
  try{await f.client.connect('English');f.instances[0].onFailure(Error('network disconnected'));await f.client.recovery;assert.equal(f.instances.length,3);assert.equal(f.failures.length,0);}finally{f.client.close();}
  for(const message of ['API 429 quota exhausted','Invalid API key','Invalid JSON payload 1007']){
   const g=fixture();await g.client.connect('English');g.instances[0].onFailure(Error(message));assert.equal(g.failures.length,1);assert.equal(g.instances.length,1);g.client.close();
  }
  const exhausted=fixture({connect:(_,n)=>{if(n>1)throw Error('offline');}});
- await exhausted.client.connect('English');exhausted.instances[0].onFailure(Error('offline'));await exhausted.client.recovery;
- assert.equal(exhausted.instances.length,4);assert.equal(exhausted.failures.length,1);exhausted.client.close();
+ await exhausted.client.connect('English');exhausted.instances[0].onFailure(Error('offline'));
+ await until(()=>exhausted.instances.length>=7);
+ assert.equal(exhausted.client.active,true);assert.equal(exhausted.failures.length,0);
+ const pending=exhausted.client.recovery;await exhausted.client.end();await pending;
+ const count=exhausted.instances.length;await tick();assert.equal(exhausted.instances.length,count);assert.equal(exhausted.client.active,false);
 });
 test('stop during a pending renewal never revives the session or emits stale text',async()=>{
  let resolveConnect;const f=fixture({connect:(_,n)=>{if(n===2)return new Promise(r=>resolveConnect=r);}});
@@ -80,4 +83,18 @@ test('real SSE transports release the old session before renewal and forward lat
   return new Response('{}');
  }});
  try{await client.connect('English');await client.reconnect(true);assert.equal(total,2);assert.equal(events.filter(([e,d])=>e==='output'&&d.text==='tail').length,1);await client.end();assert.equal(openSessions,0);}finally{client.close();}
+});
+
+test('repeated brief network outages do not end a lecture before manual stop',async()=>{
+ const f=fixture();
+ try{
+  await f.client.connect('Spanish');
+  for(let i=0;i<6;i++){
+   f.instances.at(-1).onFailure(Error('temporary disconnect'));
+   await f.client.recovery;
+   assert.equal(f.client.active,true);assert.equal(f.failures.length,0);
+  }
+  assert.equal(f.instances.length,7);
+  await f.client.end();assert.equal(f.client.active,false);
+ }finally{f.client.close();}
 });

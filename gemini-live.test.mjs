@@ -146,7 +146,7 @@ test('upstream silence after voiced audio requests one renewal; quiet audio does
   const relay=openGeminiRelay({key:'fake',target:'Spanish',Socket:FakeSocket,now:()=>time,healthIntervalMs:5,responseTimeoutMs:90000,emit:(e,d)=>events.push([e,d]),finish(){}});
   try{FakeSocket.last.message({setupComplete:{}});
    const pcm=Buffer.alloc(3200);if(voiced)for(let i=0;i<3200;i+=2)pcm.writeInt16LE(1200,i);
-   time=91000;for(let i=0;i<20;i++)relay.audio(pcm.toString('base64'));
+   time=20*60*1000;for(let i=0;i<20;i++)relay.audio(pcm.toString('base64'));
    await new Promise(r=>setTimeout(r,20));
    assert.equal(events.filter(([e,d])=>e==='rotate'&&d.reason==='response-stalled').length,voiced?1:0);
   }finally{relay.close();}
