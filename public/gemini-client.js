@@ -29,7 +29,7 @@ export class GeminiLiveClient {
 // can produce duplicate subtitles and cannot guarantee exactly-once recognition.
 export class ContinuousGeminiClient {
  constructor({token,onEvent,onFailure,fetcher=apiFetch,Client=GeminiLiveClient,
-  rotateMs=8*60*1000,retryDelays=[1000,2000,4000],maxBufferedChunks=300,flushMs=50}) {
+  rotateMs=8*60*1000,retryDelays=[1000,2000,4000,8000,15000,30000],maxBufferedChunks=300,flushMs=50}) {
   Object.assign(this,{token,onEvent,onFailure,fetcher,Client,rotateMs,retryDelays,maxBufferedChunks,flushMs});
   this.active=false;this.stopping=false;this.queue=[];this.epoch=0;this.lostChunks=0;
  }
@@ -44,6 +44,7 @@ export class ContinuousGeminiClient {
    onEvent:(event,data)=>{
     if(!this.active||epoch!==this.epoch||this.client!==client)return;
     if(event==='rotate'){if(!this.stopping)this.reconnect(true);return;}
+    if(['input','interim','final','output'].includes(event)&&data?.text)this.reconnectFailures=0;
     this.onEvent(event,data);
    },
    onFailure:error=>{if(this.active&&!this.stopping&&epoch===this.epoch&&this.client===client)this.reconnect(false,error);}
@@ -64,7 +65,7 @@ export class ContinuousGeminiClient {
  reconnect(planned,error) {
   if(!this.active||this.stopping||this.recovery)return this.recovery;
   if(!planned&&!this.retryable(error)){this.fail(error);return;}
-  if(!planned){this.failures=(this.failures||[]).filter(time=>Date.now()-time<60000);this.failures.push(Date.now());if(this.failures.length>3){this.fail(Error('網路反覆中斷，已停止重試並保留字幕。'));return;}}
+  if(!planned)this.reconnectFailures=(this.reconnectFailures||0)+1;
   this.ready=false;clearTimeout(this.rotationTimer);clearTimeout(this.flushTimer);
   this.onEvent('reconnecting',{planned,bufferSeconds:this.maxBufferedChunks/10});
   // Assign before entering async work; duplicate GoAway/failure events coalesce.
@@ -81,17 +82,19 @@ export class ContinuousGeminiClient {
   old?.close();this.client=null;
   if(!planned)this.onEvent('gap',{reason:'transport-interruption'});
   this.onEvent('boundary',{interrupted:!planned});
-  let lastError=error;
-  for(let attempt=0;attempt<=this.retryDelays.length;attempt++){
-   if(attempt>0)await this.delay(this.retryDelays[attempt-1]);
+  for(let attempt=0;;attempt++){
+   if(attempt>0||!planned){
+    const index=attempt+(this.reconnectFailures||1)-1;
+    const delay=this.retryDelays[Math.min(Math.max(0,index),this.retryDelays.length-1)]??1000;
+    await this.delay(Math.min(30000,Math.max(1,delay)));
+   }
    if(!this.active||this.stopping||epoch!==this.epoch)return;
    try{
     await this.open(epoch);
     if(!this.active||this.stopping||epoch!==this.epoch)return;
     this.onEvent('reconnected',{bufferedChunks:this.queue.length});this.arm();return;
-   }catch(e){lastError=e;if(!this.active||this.stopping||epoch!==this.epoch)return;if(!this.retryable(e))throw e;}
+   }catch(e){if(!this.active||this.stopping||epoch!==this.epoch)return;if(!this.retryable(e))throw e;}
   }
-  throw Error('自動重新連線失敗，已保留字幕。'+(lastError?.message||''));
  }
  delay(ms){return new Promise(resolve=>{this.releaseDelay=resolve;this.retryTimer=setTimeout(()=>{this.releaseDelay=null;resolve();},ms);});}
  send(audio){
