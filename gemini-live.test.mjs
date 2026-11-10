@@ -132,3 +132,38 @@ test('two target clients share PCM but keep transcripts and failure isolated',as
   await clients[0].end();
  }finally{clients.forEach(c=>c.close());}
 });
+
+test('lost audio heartbeat is retryable so continuous capture can recover',async()=>{
+ let time=0;const events=[];
+ const relay=openGeminiRelay({key:'fake',target:'English',Socket:FakeSocket,now:()=>time,healthIntervalMs:5,emit:(e,d)=>events.push([e,d]),finish(){}});
+ try{FakeSocket.last.message({setupComplete:{}});time=46000;await new Promise(r=>setTimeout(r,20));
+ const error=events.find(([e])=>e==='error');assert.ok(error);assert.equal(error[1].retryable,true);
+ }finally{relay.close();}
+});
+test('upstream silence after voiced audio requests one renewal; quiet audio does not',async()=>{
+ for(const voiced of [false,true]){
+  let time=0;const events=[];
+  const relay=openGeminiRelay({key:'fake',target:'Spanish',Socket:FakeSocket,now:()=>time,healthIntervalMs:5,responseTimeoutMs:90000,emit:(e,d)=>events.push([e,d]),finish(){}});
+  try{FakeSocket.last.message({setupComplete:{}});
+   const pcm=Buffer.alloc(3200);if(voiced)for(let i=0;i<3200;i+=2)pcm.writeInt16LE(1200,i);
+   time=91000;for(let i=0;i<20;i++)relay.audio(pcm.toString('base64'));
+   await new Promise(r=>setTimeout(r,20));
+   assert.equal(events.filter(([e,d])=>e==='rotate'&&d.reason==='response-stalled').length,voiced?1:0);
+  }finally{relay.close();}
+ }
+});
+test('repeated output renews the transport once without deleting legitimate repeated speech',()=>{
+ const events=[];const relay=openGeminiRelay({key:'fake',target:'English',Socket:FakeSocket,emit:(e,d)=>events.push([e,d]),finish(){}});
+ try{const ws=FakeSocket.last;ws.message({setupComplete:{}});
+  for(let i=0;i<12;i++)ws.message({serverContent:{outputTranscription:{text:'então'},turnComplete:true}});
+  assert.equal(events.filter(([e])=>e==='output').length,12);
+  assert.equal(events.filter(([e,d])=>e==='rotate'&&d.reason==='repeated-output').length,1);
+ }finally{relay.close();}
+});
+test('normal short repeated words do not trigger renewal',()=>{
+ const events=[];const relay=openGeminiRelay({key:'fake',target:'English',Socket:FakeSocket,emit:(e,d)=>events.push([e,d]),finish(){}});
+ try{const ws=FakeSocket.last;ws.message({setupComplete:{}});
+  for(let i=0;i<12;i++)ws.message({serverContent:{outputTranscription:{text:'yes'}}});
+  assert.equal(events.filter(([e])=>e==='rotate').length,0);
+ }finally{relay.close();}
+});
