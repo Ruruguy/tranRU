@@ -29,18 +29,20 @@ async function readSummaryStream(response, provider, onDelta = () => {}) {
   return output;
 }
 
+const isCloudRun = !!process.env.K_SERVICE;
 const port = Number(process.env.PORT || 8787);
 const publicOrigin = process.env.APP_ORIGIN ? new URL(process.env.APP_ORIGIN).origin : '';
 if (publicOrigin && !publicOrigin.startsWith('https://')) throw new Error('APP_ORIGIN 必須使用 HTTPS');
-const bindHost = publicOrigin ? '0.0.0.0' : '127.0.0.1';
+const bindHost = process.env.BIND_HOST || (publicOrigin || isCloudRun || process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const visitors = new Map();
 const visitorTTL = 30 * 60 * 1000;
 const cookieName = 'tranru_session';
 
 function createVisitorHandler() {
 const token = randomBytes(24).toString('hex');
-let key = publicOrigin ? '' : process.env.OPENAI_API_KEY || '';
-let geminiKey = publicOrigin ? '' : process.env.GEMINI_API_KEY || '';
+const isHosted = !!publicOrigin || isCloudRun;
+let key = isHosted ? '' : process.env.OPENAI_API_KEY || '';
+let geminiKey = isHosted ? '' : process.env.GEMINI_API_KEY || '';
 let translationProvider = 'auto'; // 'auto' | 'gemini' | 'openai'
 let model = 'gpt-4o-mini';
 let speech = 'gpt-4o-mini-transcribe';
@@ -302,7 +304,11 @@ const handle = async (req, res) => {
   };
 
   try {
-    if (publicOrigin ? req.headers.host !== new URL(publicOrigin).host : (req.headers.host !== `127.0.0.1:${port}` && req.headers.host !== `localhost:${port}`)) {
+    const reqHost = req.headers.host || '';
+    const isRunAppHost = isCloudRun && (reqHost.endsWith('.run.app') || reqHost.includes('.a.run.app'));
+    const isLocalHost = reqHost === `127.0.0.1:${port}` || reqHost === `localhost:${port}`;
+    const hostAllowed = publicOrigin ? (reqHost === new URL(publicOrigin).host) : (isLocalHost || isRunAppHost);
+    if (!hostAllowed) {
       return send(403, {error: '不允許的網站來源'});
     }
 
@@ -311,7 +317,8 @@ const handle = async (req, res) => {
     }
 
     if (req.method === 'POST' && req.url?.startsWith('/api/')) {
-      const expectedOrigin = publicOrigin || `http://${req.headers.host}`;
+      const isHttps = !!publicOrigin || req.headers['x-forwarded-proto'] === 'https';
+      const expectedOrigin = publicOrigin || `${isHttps ? 'https' : 'http'}://${req.headers.host}`;
       if (req.headers.origin && req.headers.origin !== expectedOrigin) return send(403, {error:'不允許跨網站請求'});
       if (req.headers['x-session-token'] !== token) {
         return send(403, {error: '請重新載入頁面 (CSRF 驗證失敗)'});
@@ -591,7 +598,8 @@ const server = http.createServer((req,res) => {
     visitor={handler:createVisitorHandler(),lastSeen:Date.now()};
     visitors.set(id,visitor);
   }
-  res.setHeader('Set-Cookie',`${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=1800${publicOrigin?'; Secure':''}`);
+  const isHttps = !!publicOrigin || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie',`${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=1800${isHttps?'; Secure':''}`);
   visitor.lastSeen=Date.now();
   return visitor.handler.handle(req,res);
 });
