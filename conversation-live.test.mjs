@@ -36,14 +36,14 @@ test('three-language conversation shares audio, routes transcripts and closes al
  await nodes.convLiveStart.onclick();assert.equal(nodes.convLiveEn.textContent,'shock delayed\nI need help.');assert.ok(stopped);assert.ok(clients.every(c=>c.closed));
 });
 
-for(const spanishSlot of [0,1,2,3]) test(`four-language conversation routes Spanish in selectable slot ${spanishSlot+1}`,async()=>{
+for(const [target,locale,sentence] of [['Spanish','es-MX','Necesito ayuda.'],['German','de-AT','Ich brauche Hilfe.'],['French','fr-CA',"J’ai besoin d’aide."]]) for(const selectedSlot of [0,1,2,3]) test(`four-language conversation routes ${target} in selectable slot ${selectedSlot+1}`,async()=>{
  const code=readFileSync('public/app.js','utf8');
  const section=code.slice(code.indexOf('let convLiveGeneration='),code.indexOf('// Firefighting, Rescue & EMS Glossary Management'));
  const ids=['convLiveStart','convLiveClear','convLiveStatus','convDetected','convLiveSource','convLiveZh','convLiveEn','convLiveJa','convLiveKo'];
  const nodes=Object.fromEntries(ids.map(id=>[id,{textContent:'',dataset:{},disabled:false}]));
  nodes.convLangCount={value:'4'};
  const selections=[['Japanese','ja-JP'],['Traditional Chinese (Taiwan)','zh-TW'],['English','en-US']];
- selections.splice(spanishSlot,0,['Spanish','es-ES']);
+ selections.splice(selectedSlot,0,[target,locale]);
  selections.forEach(([target,code],i)=>nodes['convLang'+String.fromCharCode(65+i)]={value:code,selectedOptions:[{dataset:{target}}]});
  const clients=[];let stopped=false,processor;
  class Client{constructor(o){Object.assign(this,o);this.sent=[];clients.push(this);}async connect(target){this.target=target;}send(c){this.sent.push(c);}close(){this.closed=true;}}
@@ -55,7 +55,7 @@ for(const spanishSlot of [0,1,2,3]) test(`four-language conversation routes Span
  assert.deepEqual(clients.map(c=>c.target),selections.map(([target])=>target));
  const englishSlot=selections.findIndex(([target])=>target==='English');
  const englishPane=['convLiveZh','convLiveEn','convLiveJa','convLiveKo'][englishSlot];
- const spanishPane=['convLiveZh','convLiveEn','convLiveJa','convLiveKo'][spanishSlot];
+ const selectedPane=['convLiveZh','convLiveEn','convLiveJa','convLiveKo'][selectedSlot];
  processor.onaudioprocess({inputBuffer:{getChannelData:()=>new Float32Array(2)}});
  assert.ok(clients.every(c=>c.sent[0]==='pcm'));
  clients[0].onEvent('input',{text:'休克',languageCode:'zh-TW'});
@@ -63,8 +63,8 @@ for(const spanishSlot of [0,1,2,3]) test(`four-language conversation routes Span
  assert.equal(nodes.convDetected.textContent,'中文');assert.equal(nodes.convLiveSource.textContent,'休克');assert.equal(nodes[englishPane].textContent,'shock');
  clients[0].onEvent('turn',{});clients[englishSlot].onEvent('output',{text:' delayed'});
  assert.equal(nodes[englishPane].textContent,'shock delayed');
- clients[spanishSlot].onEvent('input',{text:'Necesito ayuda.',languageCode:'es-MX'});
- assert.equal(nodes[spanishPane].textContent.trim(),'Necesito ayuda.');
- clients[spanishSlot].onEvent('output',{text:'Necesito ayuda.'});assert.equal(nodes[spanishPane].textContent.trim(),'Necesito ayuda.');
+ clients[selectedSlot].onEvent('input',{text:sentence,languageCode:locale});
+ assert.equal(nodes[selectedPane].textContent.trim(),sentence);
+ clients[selectedSlot].onEvent('output',{text:sentence});assert.equal(nodes[selectedPane].textContent.trim(),sentence);
  await nodes.convLiveStart.onclick();assert.equal(nodes[englishPane].textContent,'shock delayed');assert.ok(stopped);assert.ok(clients.every(c=>c.closed));
 });

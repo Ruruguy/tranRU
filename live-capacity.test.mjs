@@ -20,7 +20,7 @@ test('local visitor accepts four live languages, rejects fifth and releases clos
  }
  const status=await call('/api/status',{},'GET');token=JSON.parse(status.body).token;
  await call('/api/config',{geminiKey:'test-key'});
- for(const target of ['Traditional Chinese (Taiwan)','English','Bengali','Spanish'])assert.equal((await call('/api/gemini-live',{target})).status,200);
+ for(const target of ['Traditional Chinese (Taiwan)','English','German','French'])assert.equal((await call('/api/gemini-live',{target})).status,200);
  assert.equal((await call('/api/gemini-live',{target:'Japanese'})).status,409);
  relays[2].close();assert.equal((await call('/api/gemini-live',{target:'Bengali'})).status,200);
  sandbox.handler.dispose();

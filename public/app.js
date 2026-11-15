@@ -1379,7 +1379,7 @@ if ($('translate')) {
 // Demo Subtitles
 function injectDemo() {
   const text='The most important thing is not to stop questioning. Curiosity has its own reason for existing.';
-  const examples={Spanish:'Lo más importante es no dejar de hacerse preguntas. La curiosidad tiene su propia razón de existir.',English:text,Japanese:'最も大切なのは、問い続けることです。好奇心そのものに、存在する理由があります。','Traditional Chinese (Taiwan)':'最重要的是不要停止提問。好奇心本身，就有其存在的理由。'};
+  const examples={German:'Das Wichtigste ist, nicht aufzuhören, Fragen zu stellen. Die Neugier hat ihren eigenen Grund zu existieren.',French:'Le plus important est de ne jamais cesser de poser des questions. La curiosité a sa propre raison d’exister.',Spanish:'Lo más importante es no dejar de hacerse preguntas. La curiosidad tiene su propia razón de existir.',English:text,Japanese:'最も大切なのは、問い続けることです。好奇心そのものに、存在する理由があります。','Traditional Chinese (Taiwan)':'最重要的是不要停止提問。好奇心本身，就有其存在的理由。'};
   const translation=target=>examples[target]||'此語言未提供示範譯文；實際聆聽時將依所選語言翻譯。';
   const primary=newRecord({demo:true,state:'done',text,translation:translation($('target').value)});
   if($('dualTranslation').checked){
@@ -2365,7 +2365,7 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
     appendConvLive('convLiveSource',toTaiwanTranscript(data.text,data.languageCode||''));
     if(data.languageCode){
      const code=data.languageCode.toLowerCase().split('-')[0];
-     if($('convDetected'))$('convDetected').textContent=({zh:'中文',en:'英文',ja:'日文',es:'西班牙語',bn:'孟加拉語'})[code]||data.languageCode;
+     if($('convDetected'))$('convDetected').textContent=({zh:'中文',en:'英文',ja:'日文',es:'西班牙語',bn:'孟加拉語',de:'德文',fr:'法文'})[code]||data.languageCode;
      activeTargets.forEach((entry,i)=>{
       const selected=$('convLang'+String.fromCharCode(65+i));
       const matches=selected?.value?.toLowerCase().split('-')[0]===code;

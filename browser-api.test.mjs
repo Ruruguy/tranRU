@@ -51,7 +51,7 @@ test('four Gemini sessions can run together; a fifth is refused and slots recove
  }
  const api=createBrowserAPI({Socket});await api('/api/config',{body:JSON.stringify({geminiKey:'test-key'})});
  const readers=[];
- for(const target of ['Traditional Chinese (Taiwan)','English','Bengali','Spanish']){
+ for(const target of ['Traditional Chinese (Taiwan)','English','German','French']){
   const response=await api('/api/gemini-live',{body:JSON.stringify({target})});assert.equal(response.status,200);
   const reader=response.body.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/event: ready/);readers.push(reader);
  }
@@ -60,4 +60,25 @@ test('four Gemini sessions can run together; a fifth is refused and slots recove
  const retry=await api('/api/gemini-live',{body:JSON.stringify({target:'Bengali'})});assert.equal(retry.status,200);
  const retryReader=retry.body.getReader();await retryReader.read();await retryReader.cancel();
  await Promise.all(readers.map(reader=>reader.cancel()));
+});
+
+for(const [target,code,text] of [['German','de','Guten Tag.'],['French','fr','Bonjour.']]) test(`${target} reaches Gemini, OpenAI and free text translation with the correct target`,async()=>{
+ for(const provider of ['gemini','openai']){
+  let request;
+  const api=createBrowserAPI({fetcher:async(url,options)=>{
+   request={url,body:JSON.parse(options.body)};
+   return new Response(provider==='gemini'?`data: ${JSON.stringify({candidates:[{content:{parts:[{text}]},finishReason:'STOP'}]})}\n\n`:`data: ${JSON.stringify({choices:[{delta:{content:text}}]})}\n\ndata: [DONE]\n\n`);
+  }});
+  await api('/api/config',{body:JSON.stringify({geminiKey:'fake-gemini',key:'fake-openai',translationProvider:provider})});
+  const response=await api('/api/translate-stream',{body:JSON.stringify({text:'你好',target})});
+  const events=[];new SSEParser((event,data)=>events.push({event,data})).push(await response.text());
+  assert.equal(events.at(-1).event,'done');assert.equal(events.at(-1).data.translation,text);
+  assert.match(request.url,provider==='gemini'?/generativelanguage.googleapis.com/:/api.openai.com/);
+  const prompt=provider==='gemini'?request.body.systemInstruction.parts[0].text:request.body.messages[0].content;
+  assert.ok(prompt.includes('into '+target));
+ }
+ let requested;
+ const free=createBrowserAPI({fetcher:async url=>{requested=new URL(url);return Response.json([[[text]]]);}});
+ const response=await free('/api/free-translate',{body:JSON.stringify({text:'你好',source:'zh-TW',target})});
+ assert.equal((await response.json()).translation,text);assert.equal(requested.searchParams.get('tl'),code);
 });
