@@ -1,3 +1,4 @@
+import {ConversationRecognition,validateConversationEngine} from './conversation-engine.js';
 import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
 import {ContinuousGeminiClient as GeminiLiveClient, PCMChunks, SSEParser} from './gemini-client.js';
@@ -2252,7 +2253,64 @@ window.addEventListener("pagehide",()=>{stopConvSpeech();window.speechSynthesis?
 // supplies language detection, but does not identify individual speakers.
 let convLiveGeneration=0, convLiveRunning=false, convLiveStream=null, convLiveContext=null;
 let convLiveNodes=[], convLiveClients=[];
+let convAlternative=null;
 const convLiveTargets=[['Traditional Chinese (Taiwan)','convLiveZh'],['English','convLiveEn'],['Japanese','convLiveJa']];
+function getConversationTargets(){
+   if (!$('convLangCount')) return convLiveTargets;
+   const count = parseInt($('convLangCount').value, 10) || 3;
+   const getTarget = (id, fb) => {
+    const el = $(id);
+    const opt = el?.selectedOptions?.[0];
+    return opt?.dataset?.target || opt?.value || fb;
+   };
+   const list = [
+    [getTarget('convLangA', 'Traditional Chinese (Taiwan)'), 'convLiveZh', 1],
+    [getTarget('convLangB', 'English'), 'convLiveEn', 2],
+   ];
+   if (count >= 3) list.push([getTarget('convLangC', 'Japanese'), 'convLiveJa', 3]);
+   if (count === 4) list.push([getTarget('convLangD', 'Spanish'), 'convLiveKo', 4]);
+   return list;
+
+}
+function updateConvEngineUI(){
+ const selected=$('convSpeechEngine');if(!selected)return;
+ const engine=selected.value,source=$('convSourceLanguage');
+ if(source)source.disabled=engine==='gemini';
+ for(let i=1;i<=4;i++)if($('indicatorText'+i))$('indicatorText'+i).textContent=['azure','native','free'].includes(engine)?'指定語言辨識 · 其他欄同步翻譯':'全程收音 · 自動辨識發言語言';
+ const descriptions={gemini:'Gemini 即時口譯：自動辨識發言語言，翻譯到所有已選欄位',precision:'Gemini 精準辨識＋文字翻譯：支援自動偵測，附醫療詞彙提示',vad:'OpenAI 切段辨識＋文字翻譯：短句切段後產生字幕，需 OpenAI 金鑰',azure:'Azure Speech＋文字翻譯：請指定辨識語言，另需 Gemini 或 OpenAI 翻譯金鑰',native:'瀏覽器原生辨識＋AI 翻譯：請指定辨識語言，需文字翻譯金鑰',free:'瀏覽器原生辨識＋免金鑰翻譯：請指定辨識語言，支援程度依瀏覽器而異'};
+ if(!convLiveRunning&&$('convLiveStatus'))$('convLiveStatus').textContent=descriptions[engine]||'';
+}
+if($('convSpeechEngine'))$('convSpeechEngine').onchange=updateConvEngineUI;
+updateConvEngineUI();
+async function startAlternativeConv(engine){
+ const language=$('convSourceLanguage')?.value||'auto';
+ let generation=null;
+ try{
+  validateConversationEngine({engine,language,geminiConfigured,openaiConfigured,configured:translationReady(),azureKey,azureRegion,Recognition:window.SpeechRecognition||window.webkitSpeechRecognition});
+  const targets=getConversationTargets();
+  if(new Set(targets.map(x=>x[0])).size!==targets.length)throw Error('請為各欄選擇不同的語言');
+  stopConvSpeech();window.speechSynthesis?.cancel();
+  generation=++convLiveGeneration;
+  for(const el of document.querySelectorAll('#conversationView select'))el.disabled=true;
+  if($('convSwapLangs'))$('convSwapLangs').disabled=true;
+  $('convLiveStart').disabled=true;
+  $('convLiveStatus').textContent='正在取得麥克風授權並啟動辨識…';
+  const bases=targets.map(([,id])=>$(id)?.dataset.empty==='no'?$(id).textContent:'');
+  const adapter=new ConversationRecognition({engine,language,targets:targets.map(x=>x[0]),token,azureKey,azureRegion,context:$('context')?.value||'',silenceMs:Number($('vadSilenceMs')?.value||650),
+   onAudio:updateAudioReactiveGlowFromSamples,
+   onSource:record=>{if(generation!==convLiveGeneration)return;targets.forEach(([target,id,pane])=>{const native=!!sourceForTarget(record,target);$('paneConv'+pane)?.classList?.toggle?.('speaking',native);if($('paneState'+pane))$('paneState'+pane).textContent=native?'正在發言 · 原文即時顯示':'即時翻譯中';});},
+   onCaption:(index,text)=>{if(generation===convLiveGeneration)appendConvLive(targets[index][1],(bases[index]?bases[index]+'\n':'')+text,true);},
+   onStatus:message=>{if(generation===convLiveGeneration)$('convLiveStatus').textContent=message;},
+   onFailure:error=>{if(generation===convLiveGeneration)stopConvLive('辨識已停止：'+error.message);}
+  });
+  convAlternative=adapter;
+  await adapter.start();
+  if(generation!==convLiveGeneration)return;
+  convLiveRunning=true;$('convPanes')?.classList?.add('listening');
+  $('convLiveStart').disabled=false;$('convLiveStart').textContent='■ 停止對話聆聽';$('convLiveStart').classList?.add('recording');
+  targets.forEach(([,id,pane])=>{if($('paneState'+pane))$('paneState'+pane).textContent='🎙️ 收音與翻譯中';});
+ }catch(error){if(generation!==null&&generation!==convLiveGeneration)return;stopConvLive('無法啟動：'+error.message);if(/金鑰/.test(error.message))$('dialog').showModal();}
+}
 function appendConvLive(id,text,replace=false) {
  const el=$(id); if(!el)return;
  if(el.dataset && el.dataset.empty!=='no'){el.textContent='';el.dataset.empty='no';}
@@ -2276,6 +2334,7 @@ function resetConvLiveText(){
 }
 function stopConvLive(message='○ 已停止聆聽'){
  ++convLiveGeneration;convLiveRunning=false;
+ convAlternative?.close();convAlternative=null;
  for(const client of convLiveClients)client.close();convLiveClients=[];
  for(const node of convLiveNodes){try{node.disconnect();}catch{}}convLiveNodes=[];
  convLiveStream?.getTracks().forEach(track=>track.stop());convLiveStream=null;
@@ -2294,10 +2353,13 @@ function stopConvLive(message='○ 已停止聆聽'){
   $('convLiveStart').textContent='● 開始自動對話聆聽';
   $('convLiveStart').classList?.remove('recording');
  }
+ updateConvEngineUI();
  if($('convLiveStatus')) $('convLiveStatus').textContent=message;
 }
 if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
  if(convLiveRunning){stopConvLive();return;}
+ const engine=$('convSpeechEngine')?.value||'gemini';
+ if(engine!=='gemini'){await startAlternativeConv(engine);return;}
  if(!geminiConfigured){
   $('dialog').showModal();
   if($('convLiveStatus')) $('convLiveStatus').textContent='自動辨識多語對話需要 Gemini API 金鑰；免金鑰僅供指定語言的手動輸入';
@@ -2315,22 +2377,7 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   convLiveStream=captured;
 
   // 動態語言目標設定（相容 conversation-live.test.mjs 預設三語）
-  const dynamicTargets = (() => {
-   if (!$('convLangCount')) return convLiveTargets;
-   const count = parseInt($('convLangCount').value, 10) || 3;
-   const getTarget = (id, fb) => {
-    const el = $(id);
-    const opt = el?.selectedOptions?.[0];
-    return opt?.dataset?.target || opt?.value || fb;
-   };
-   const list = [
-    [getTarget('convLangA', 'Traditional Chinese (Taiwan)'), 'convLiveZh', 1],
-    [getTarget('convLangB', 'English'), 'convLiveEn', 2],
-   ];
-   if (count >= 3) list.push([getTarget('convLangC', 'Japanese'), 'convLiveJa', 3]);
-   if (count === 4) list.push([getTarget('convLangD', 'Spanish'), 'convLiveKo', 4]);
-   return list;
-  })();
+  const dynamicTargets = getConversationTargets();
 
   const activeTargets = dynamicTargets;
   if(new Set(activeTargets.map(x=>x[0])).size!==activeTargets.length)throw Error('請為各欄選擇不同的語言');
@@ -2402,7 +2449,7 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   if($('convLiveStatus')) $('convLiveStatus').textContent='● 全程自動收音中 · 雙方直接開口即可，系統將自動偵測發言語言並即時翻譯';
  }catch(error){if(generation===convLiveGeneration)stopConvLive('無法啟動：'+error.message);}
 };
-if($('convLiveClear'))$('convLiveClear').onclick=()=>{convRecords=[];resetConvLiveText();drawConvFeed();};
+if($('convLiveClear'))$('convLiveClear').onclick=()=>{convAlternative?.clear();convRecords=[];resetConvLiveText();drawConvFeed();};
 window.addEventListener('pagehide',()=>stopConvLive());
 
 // Firefighting, Rescue & EMS Glossary Management
