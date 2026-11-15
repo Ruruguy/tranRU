@@ -28,7 +28,7 @@
   --subtitle: 24px;
 
   /* Audio-Reactive Voice Glow variables */
-  --voice-glow-opacity: 0.3;
+  --voice-glow-opacity: 0;
   --voice-glow-scale: 1;
   --voice-glow-spread: 48px;
   --voice-glow-hue: 242deg;
@@ -415,13 +415,13 @@ select:focus {
   margin-bottom: 24px;
 }
 
-.ambient-glow-portal {
+.ambient-glow-portal, #convPanes::before {
   position: absolute;
   inset: -24px;
   border-radius: 36px;
   pointer-events: none;
   z-index: 0;
-  opacity: var(--voice-glow-opacity, 0.32);
+  opacity: var(--voice-glow-opacity, 0);
   transform: scale(var(--voice-glow-scale, 1));
   background: radial-gradient(ellipse at 50% 40%, hsla(var(--voice-glow-hue, 242deg), 65%, 55%, 0.35) 0%, rgba(52, 55, 85, 0.22) 38%, rgba(0, 0, 0, 0) 70%);
   filter: blur(var(--voice-glow-spread, 48px));
@@ -1801,3 +1801,7 @@ body.focus .fullscreen-font-controls,body.presenting .fullscreen-font-controls {
 .pane-live-stream,.conv-bubble-text,.conv-bubble-trans,
 body.presenting .pane-live-stream,body.presenting .conv-bubble-text,body.presenting .conv-bubble-trans {font-size:var(--subtitle);}
 body.presenting .presentation-body,body.presenting #convPanes .conv-pane-body {padding-bottom:76px;}
+
+/* Use the same audio-reactive backdrop in conversation mode. */
+#convPanes {position:relative;isolation:isolate;}
+#convPanes::before {content:"";z-index:-1;}

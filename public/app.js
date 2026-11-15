@@ -268,14 +268,14 @@ document.addEventListener('keydown', e => {
 });
 
 // Audio-Reactive Voice Glow (演講過程隨聲調輕微光影波動)
-let voiceGlowEnabled = true;
-try { voiceGlowEnabled = localStorage.getItem('tranru_voice_glow') !== 'false'; } catch {}
-let currentGlowOpacity = 0.28;
+// Start quietly on every page load; enabling is an explicit user action.
+let voiceGlowEnabled = false;
+let currentGlowOpacity = 0;
 let currentGlowScale = 1.0;
 let currentGlowSpread = 44;
 let currentGlowHue = 242;
 
-let targetGlowOpacity = 0.28;
+let targetGlowOpacity = 0;
 let targetGlowScale = 1.0;
 let targetGlowSpread = 44;
 let targetGlowHue = 242;
@@ -292,6 +292,16 @@ function syncVoiceGlowBtn() {
     btn.textContent = '✨ 聲波光影 OFF';
     btn.setAttribute('aria-pressed', 'false');
   }
+}
+
+function updateAudioReactiveGlowFromSamples(input) {
+  if(!voiceGlowEnabled || !input.length)return;
+  let energy=0,crossings=0;
+  for(let i=0;i<input.length;i++){
+    energy+=input[i]*input[i];
+    if(i>0 && ((input[i]>=0 && input[i-1]<0)||(input[i]<0 && input[i-1]>=0)))crossings++;
+  }
+  updateAudioReactiveGlow(Math.sqrt(energy/input.length),crossings/input.length);
 }
 
 function updateAudioReactiveGlow(rms, zcr) {
@@ -313,7 +323,6 @@ function initVoiceGlow() {
     syncVoiceGlowBtn();
     btn.onclick = () => {
       voiceGlowEnabled = !voiceGlowEnabled;
-      try { localStorage.setItem('tranru_voice_glow', voiceGlowEnabled ? 'true' : 'false'); } catch {}
       syncVoiceGlowBtn();
     };
   }
@@ -2377,7 +2386,7 @@ if($('convLiveStart')) $('convLiveStart').onclick=async()=>{
   await audioContext.resume();if(generation!==convLiveGeneration)return;
   const input=audioContext.createMediaStreamSource(captured),processor=audioContext.createScriptProcessor(2048,1,1),sink=audioContext.createGain(),chunks=new PCMChunks(audioContext.sampleRate);
   convLiveNodes=[input,processor,sink];sink.gain.value=0;input.connect(processor);processor.connect(sink);sink.connect(audioContext.destination);
-  processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;for(const chunk of chunks.push(e.inputBuffer.getChannelData(0)))for(const client of clients)client.send(chunk);};
+  processor.onaudioprocess=e=>{if(generation!==convLiveGeneration)return;const input=e.inputBuffer.getChannelData(0);updateAudioReactiveGlowFromSamples(input);for(const chunk of chunks.push(input))for(const client of clients)client.send(chunk);};
   for(const track of captured.getAudioTracks())track.onended=()=>{if(generation===convLiveGeneration)stopConvLive('麥克風已停止');};
   convLiveRunning=true;
   $('convPanes')?.classList?.add('listening');

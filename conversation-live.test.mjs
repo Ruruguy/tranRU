@@ -13,7 +13,7 @@ test('three-language conversation shares audio, routes transcripts and closes al
  class Client{constructor(o){Object.assign(this,o);this.sent=[];clients.push(this);}async connect(target){this.target=target;}send(c){this.sent.push(c);}close(){this.closed=true;}}
  class AudioContext{constructor(){this.sampleRate=16000;}async resume(){}createMediaStreamSource(){return {connect(){},disconnect(){}};}createScriptProcessor(){return processor={connect(){},disconnect(){}};}createGain(){return {gain:{},connect(){},disconnect(){}};}async close(){}}
  const track={stop(){stopped=true;}};
- const sandbox={document:{},$:id=>nodes[id],token:'fake',geminiConfigured:true,sourceForTarget,GeminiLiveClient:Client,PCMChunks:class{push(){return ['pcm'];}},isTraditionalChineseTarget:t=>t.includes('Chinese'),toTaiwanTranscript:t=>t,navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[track],getAudioTracks:()=>[track]})}},window:{AudioContext,speechSynthesis:{cancel(){}},addEventListener(){}},stopConvSpeech(){}};
+ const sandbox={document:{},$:id=>nodes[id],token:'fake',geminiConfigured:true,sourceForTarget,GeminiLiveClient:Client,PCMChunks:class{push(){return ['pcm'];}},isTraditionalChineseTarget:t=>t.includes('Chinese'),toTaiwanTranscript:t=>t,navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[track],getAudioTracks:()=>[track]})}},window:{AudioContext,speechSynthesis:{cancel(){}},addEventListener(){}},stopConvSpeech(){},updateAudioReactiveGlowFromSamples(samples){assert.equal(samples.length,2);}};
  vm.runInNewContext(section,sandbox);
  await nodes.convLiveStart.onclick();
  assert.deepEqual(clients.map(c=>c.target),['Traditional Chinese (Taiwan)','English','Japanese']);
@@ -49,7 +49,7 @@ for(const spanishSlot of [0,1,2,3]) test(`four-language conversation routes Span
  class Client{constructor(o){Object.assign(this,o);this.sent=[];clients.push(this);}async connect(target){this.target=target;}send(c){this.sent.push(c);}close(){this.closed=true;}}
  class AudioContext{constructor(){this.sampleRate=16000;}async resume(){}createMediaStreamSource(){return {connect(){},disconnect(){}};}createScriptProcessor(){return processor={connect(){},disconnect(){}};}createGain(){return {gain:{},connect(){},disconnect(){}};}async close(){}}
  const track={stop(){stopped=true;}};
- const sandbox={document:{},$:id=>nodes[id],token:'fake',geminiConfigured:true,sourceForTarget,GeminiLiveClient:Client,PCMChunks:class{push(){return ['pcm'];}},isTraditionalChineseTarget:t=>t.includes('Chinese'),toTaiwanTranscript:t=>t,navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[track],getAudioTracks:()=>[track]})}},window:{AudioContext,speechSynthesis:{cancel(){}},addEventListener(){}},stopConvSpeech(){}};
+ const sandbox={document:{},$:id=>nodes[id],token:'fake',geminiConfigured:true,sourceForTarget,GeminiLiveClient:Client,PCMChunks:class{push(){return ['pcm'];}},isTraditionalChineseTarget:t=>t.includes('Chinese'),toTaiwanTranscript:t=>t,navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[track],getAudioTracks:()=>[track]})}},window:{AudioContext,speechSynthesis:{cancel(){}},addEventListener(){}},stopConvSpeech(){},updateAudioReactiveGlowFromSamples(samples){assert.equal(samples.length,2);}};
  vm.runInNewContext(section,sandbox);
  await nodes.convLiveStart.onclick();
  assert.deepEqual(clients.map(c=>c.target),selections.map(([target])=>target));
