@@ -268,6 +268,28 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Compact control for the existing optional medical translation refinement.
+function syncMedicalRefineToggle(){
+ const button=$('medicalRefineToggle'),input=$('medicalRefine');if(!button||!input)return;
+ const enabled=input.checked;
+ button.textContent='醫療術語校對 '+(enabled?'ON':'OFF');
+ button.setAttribute('aria-pressed',String(enabled));
+ const detail=$('medicalRefineStatus')?.textContent||'';
+ button.title='開啟後，Gemini 即時口譯每段完成後會參考醫療詞庫重新翻譯，可能增加延遲與 API 費用。辨識詞彙提示不受此開關影響。'+(detail?'\n'+detail:'');
+ button.classList.toggle('refinement-warning',enabled&&/未完成|上限/.test(detail));
+}
+if($('medicalRefineToggle')){
+ $('medicalRefineToggle').onclick=()=>{
+  $('medicalRefine').checked=!$('medicalRefine').checked;
+  if(!$('medicalRefine').checked)medicalRefinementQueue.length=0;
+  $('medicalRefineStatus').textContent=$('medicalRefine').checked?'已開啟：後續含醫療詞彙的 Gemini 即時譯文將額外校對。':'已關閉額外術語校對。';
+  syncMedicalRefineToggle();
+ };
+ $('medicalRefine').onchange=syncMedicalRefineToggle;
+ new MutationObserver(syncMedicalRefineToggle).observe($('medicalRefineStatus'),{childList:true,characterData:true,subtree:true});
+ syncMedicalRefineToggle();
+}
+
 // Audio-Reactive Voice Glow (演講過程隨聲調輕微光影波動)
 // Start quietly on every page load; enabling is an explicit user action.
 let voiceGlowEnabled = false;

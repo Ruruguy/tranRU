@@ -1805,3 +1805,8 @@ body.presenting .presentation-body,body.presenting #convPanes .conv-pane-body {p
 /* Use the same audio-reactive backdrop in conversation mode. */
 #convPanes {position:relative;isolation:isolate;}
 #convPanes::before {content:"";z-index:-1;}
+
+.medical-refine-toggle[aria-pressed="true"] {background:rgba(99,102,241,.2);border-color:var(--accent-electric-indigo);color:var(--text-ghost-white);}
+.medical-refine-toggle.refinement-warning {border-color:#fbbf24;color:#fde68a;}
+
+.sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
