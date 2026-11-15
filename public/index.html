@@ -10,7 +10,7 @@
   <div id="fileWarning" hidden style="padding:12px;background:#8b1616;color:white">請透過 <a href="http://127.0.0.1:8787/" style="color:white">本機網站</a> 或線上網址開啟，直接開啟檔案無法啟動翻譯。</div>
   <script>if(location.protocol === "file:") document.getElementById("fileWarning").hidden = false;</script>
   <nav class="topbar" aria-label="主要導覽">
-    <a class="brand" href="./">▥ <span>tranRU</span></a>
+    <a class="brand" href="./">▥ <span class="brand-copy"><span>tranRU</span><small class="creator-credit">製作者：大佛A-Ru</small></span></a>
     <button class="nav active" id="navLecture">◉ 演講模式</button>
     <button class="nav" id="navConversation">⇄ 雙向溝通</button>
     <div class="topbar-actions">
@@ -446,6 +446,10 @@
       </div>
     </div>
   </main>
+
+  <footer class="site-footer">
+    <span>tranRU · 製作者：大佛A-Ru</span>
+  </footer>
 
   <dialog id="dialog">
     <form method="dialog"><button class="close" aria-label="關閉">×</button></form>
