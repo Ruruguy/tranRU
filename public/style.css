@@ -1790,3 +1790,14 @@ body.presenting #convPanes .conv-pane-body {min-height:0;padding:16px 18px 40px;
 .creator-credit {font-size:11px;font-weight:400;letter-spacing:0;color:var(--text-pale-mist);}
 .site-footer {justify-content:center;flex-shrink:0;margin:0;padding:20px 16px;border-top:1px solid var(--border-ash);text-align:center;}
 body.focus .site-footer, body.presenting .site-footer, :fullscreen .site-footer {display:none;}
+
+
+.subtitle-size-controls {display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap;color:var(--text-pale-mist);font-size:12px;white-space:nowrap;}
+.subtitle-size-controls button {width:36px;height:36px;justify-content:center;padding:0;font-size:20px;line-height:1;}
+.subtitle-size-controls output {min-width:42px;text-align:center;font-variant-numeric:tabular-nums;}
+.subtitle-size-controls button:disabled {opacity:.35;cursor:default;}
+.fullscreen-font-controls {display:none;}
+body.focus .fullscreen-font-controls,body.presenting .fullscreen-font-controls {display:inline-flex;position:fixed;left:14px;bottom:14px;z-index:160;padding:6px 10px;border:1px solid var(--border-ash);border-radius:24px;background:rgba(18,22,34,.95);}
+.pane-live-stream,.conv-bubble-text,.conv-bubble-trans,
+body.presenting .pane-live-stream,body.presenting .conv-bubble-text,body.presenting .conv-bubble-trans {font-size:var(--subtitle);}
+body.presenting .presentation-body,body.presenting #convPanes .conv-pane-body {padding-bottom:76px;}

@@ -22,6 +22,13 @@
   </nav>
   <button id="exitCompact" class="exit-compact" hidden>退出全螢幕 · Esc</button>
 
+  <div class="subtitle-size-controls fullscreen-font-controls" role="group" aria-label="字幕字體大小">
+        <span>字幕字體</span>
+        <button type="button" data-font-step="-2" aria-label="縮小字幕字體" title="縮小字幕字體">－</button>
+        <output data-font-value aria-live="polite">24 px</output>
+        <button type="button" data-font-step="2" aria-label="放大字幕字體" title="放大字幕字體">＋</button>
+      </div>
+
   <main>
     <div id="lectureView">
       <header class="lecture-hero">
@@ -133,6 +140,12 @@
     </div>
 
     <div class="lecture-actions">
+      <div class="subtitle-size-controls " role="group" aria-label="字幕字體大小">
+        <span>字幕字體</span>
+        <button type="button" data-font-step="-2" aria-label="縮小字幕字體" title="縮小字幕字體">－</button>
+        <output data-font-value aria-live="polite">24 px</output>
+        <button type="button" data-font-step="2" aria-label="放大字幕字體" title="放大字幕字體">＋</button>
+      </div>
       <label><input type="checkbox" id="autoscroll" checked> 自動捲動</label>
       <button id="summaryBtn">✨ 產生本場摘要</button>
       <button id="export">↓ 匯出逐字稿</button>
@@ -324,6 +337,12 @@
         <div class="ctrl-group ctrl-actions">
           <button class="primary" id="convLiveStart">● 開始自動對話聆聽</button>
           <button id="convLiveClear">清空對話</button>
+          <div class="subtitle-size-controls " role="group" aria-label="字幕字體大小">
+        <span>字幕字體</span>
+        <button type="button" data-font-step="-2" aria-label="縮小字幕字體" title="縮小字幕字體">－</button>
+        <output data-font-value aria-live="polite">24 px</output>
+        <button type="button" data-font-step="2" aria-label="放大字幕字體" title="放大字幕字體">＋</button>
+      </div>
         </div>
       </section>
 

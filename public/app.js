@@ -198,7 +198,23 @@ $('thirdTarget').onchange = syncDualUI;
 syncDualUI();
 
 // UI Controls
-if ($('font')) $('font').oninput = () => {document.documentElement.style.setProperty('--subtitle', $('font').value + 'px');refreshPresentation();};
+let subtitleSize=24;
+try { const saved=Number(localStorage.getItem('tranru_subtitle_size'));if(Number.isFinite(saved)&&saved>=16&&saved<=64)subtitleSize=saved; } catch {}
+function setSubtitleSize(value) {
+  subtitleSize=Math.max(16,Math.min(64,Number(value)||24));
+  document.documentElement.style.setProperty('--subtitle',subtitleSize+'px');
+  document.querySelectorAll('[data-font-value]').forEach(el=>el.textContent=subtitleSize+' px');
+  document.querySelectorAll('[data-font-step]').forEach(el=>el.disabled=Number(el.dataset.fontStep)<0?subtitleSize<=16:subtitleSize>=64);
+  if($('font'))$('font').value=subtitleSize;
+  try { localStorage.setItem('tranru_subtitle_size',String(subtitleSize)); } catch {}
+  requestAnimationFrame(()=>{
+    refreshPresentation();
+    document.querySelectorAll('.conv-pane-body').forEach(el=>el.scrollTop=el.scrollHeight);
+  });
+}
+document.querySelectorAll('[data-font-step]').forEach(button=>button.onclick=()=>setSubtitleSize(subtitleSize+Number(button.dataset.fontStep)));
+if($('font'))$('font').oninput=()=>setSubtitleSize($('font').value);
+setSubtitleSize(subtitleSize);
 function syncCompactControls() {
   document.body.classList.toggle('presenting',document.body.classList.contains('focus') || !!document.fullscreenElement);
   draw();
