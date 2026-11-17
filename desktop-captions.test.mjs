@@ -7,7 +7,7 @@ const code='a'.repeat(32),payload={lanes:[{label:'中文',text:'透明字幕測�
 test('desktop payload sends captions and styles only, never keys or audio',()=>{
  const data=desktopCaptionPayload({...payload,geminiKey:'private-secret',audio:'private-recording',style:{...payload.style,apiKey:'another-secret'}});
  assert.doesNotMatch(JSON.stringify(data),/private|secret|recording/);assert.deepEqual(data.lanes,payload.lanes.map(l=>({...l,source:false})));
- const bounded=desktopCaptionPayload({lanes:Array.from({length:8},()=>({text:'😀'.repeat(10000)})),style:{color:'bad',size:999,lines:100}});assert.equal(bounded.lanes.length,4);assert.equal(Array.from(bounded.lanes[0].text).length,6000);assert.equal(bounded.style.size,64);assert.equal(bounded.style.lines,5);assert.equal(bounded.style.color,'#ffffff');
+ const bounded=desktopCaptionPayload({lanes:Array.from({length:8},()=>({text:'😀'.repeat(10000)})),style:{color:'bad',size:999,lines:100}});assert.equal(bounded.lanes.length,4);assert.equal(Array.from(bounded.lanes[0].text).length,6000);assert.equal(bounded.style.size,96);assert.equal(bounded.style.lines,5);assert.equal(bounded.style.color,'#ffffff');
 });
 test('desktop connection authenticates before sending text and coalesces identical updates',async()=>{
  const calls=[],messages=[];const client=new DesktopCaptionClient({intervalMs:1,fetcher:async(url,options)=>{calls.push({url,...options});return Response.json({app:'tranRU-Mac-Overlay',ok:true});},onStatus:m=>messages.push(m)});

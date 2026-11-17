@@ -1,7 +1,7 @@
 const BRIDGE='http://127.0.0.1:8799';
 export function desktopCaptionPayload(value={}){
  const style=value.style||{};
- return {visible:value.visible!==false,lanes:(Array.isArray(value.lanes)?value.lanes:[]).slice(0,4).map(lane=>({label:String(lane.label||'').slice(0,100),text:Array.from(String(lane.text||'')).slice(-6000).join(''),source:lane.source===true})),style:{color:/^#[0-9a-f]{6}$/i.test(style.color)?style.color:'#ffffff',size:Math.max(18,Math.min(64,Number(style.size)||32)),lines:Math.max(1,Math.min(5,Number(style.lines)||3)),outline:style.outline!==false}};
+ return {visible:value.visible!==false,lanes:(Array.isArray(value.lanes)?value.lanes:[]).slice(0,4).map(lane=>({label:String(lane.label||'').slice(0,100),text:Array.from(String(lane.text||'')).slice(-6000).join(''),source:lane.source===true})),style:{color:/^#[0-9a-f]{6}$/i.test(style.color)?style.color:'#ffffff',size:Math.max(18,Math.min(96,Number(style.size)||48)),lines:Math.max(1,Math.min(5,Number(style.lines)||2)),outline:style.outline!==false,backplate:style.backplate===true}};
 }
 export class DesktopCaptionClient {
  constructor({fetcher=(...args)=>globalThis.fetch(...args),onStatus=()=>{},intervalMs=250,retryMs=1000}={}){Object.assign(this,{fetcher,onStatus,intervalMs,retryMs});this.active=false;this.generation=0;this.controllers=new Set();}
@@ -20,9 +20,10 @@ export class DesktopCaptionClient {
   if(!/^[0-9a-f]{32}$/i.test(String(code).trim()))throw Error('請貼上 Mac 工具提供的 32 字元連線碼；不是 API 金鑰。');
   this.code=String(code).trim().toLowerCase();this.active=true;this.failures=0;this.lastSignature='';
   try{
-   await this.post('/hello',{});
+   const hello=await this.post('/hello',{});
+   this.needsUpdate=!/^1\.[1-9]\d*\./.test(hello.version||'');
    if(!this.active||generation!==this.generation)return;
-   this.onStatus('已連接 Mac 透明字幕，可回到 PPT 播放。');this.send(payload);
+   this.onStatus(this.needsUpdate?'已連接；Mac 工具為舊版，請下載新版以改善字形與完整行顯示。':'已連接 Mac 透明字幕，可回到 PPT 播放。');this.send(payload);
   }catch(error){if(generation===this.generation){this.close();throw Error(error.fatal?error.message:'尚未連上 Mac 工具。請先開啟工具，並確認瀏覽器已允許連接這台裝置／本機網路。');}}
  }
  send(payload){if(!this.active)return;this.latest=desktopCaptionPayload(payload);if(!this.timer&&!this.sending)this.schedule(this.intervalMs);}

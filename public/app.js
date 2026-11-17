@@ -1,5 +1,5 @@
 import {DesktopCaptionClient} from './desktop-captions.js';
-import {DEFAULT_CAPTION_STYLE,CAPTION_PRESETS,captionStyle,visibleCaptionLanes,floatingCaptionCSS,renderFloatingCaptions,captionControlsMarkup,syncCaptionControls,bindCaptionControls} from './floating-captions.js';
+import {DEFAULT_CAPTION_STYLE,CAPTION_PRESETS,captionStyle,loadCaptionStyle,visibleCaptionLanes,floatingCaptionCSS,renderFloatingCaptions,captionControlsMarkup,syncCaptionControls,bindCaptionControls} from './floating-captions.js';
 import {ConversationRecognition,validateConversationEngine} from './conversation-engine.js';
 import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
@@ -1653,7 +1653,7 @@ function escapeHtml(str) {
 }
 
 let floatingStyle={...DEFAULT_CAPTION_STYLE};
-try {floatingStyle=captionStyle(JSON.parse(localStorage.getItem('tranru_caption_style'))||DEFAULT_CAPTION_STYLE);}catch{}
+try {floatingStyle=loadCaptionStyle(JSON.parse(localStorage.getItem('tranru_caption_style')));}catch{}
 function floatingLanes(){
  if($('conversationView')?.style.display==='block'){
   const count=Number($('convLangCount')?.value||3);
@@ -1683,7 +1683,7 @@ function updatePiP(){
 function refreshFloatingStyle(){
  const lanes=floatingLanes();
  const preview=$('captionStylePreview');
- if(preview){preview.style.background=floatingStyle.background;preview.style.color=floatingStyle.color;preview.style.fontSize=floatingStyle.size+'px';preview.style.textShadow=floatingStyle.outline?'1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,0 2px 7px #000':'none';}
+ if(preview){preview.style.background=floatingStyle.background;preview.style.color=floatingStyle.color;preview.style.fontSize=floatingStyle.size+'px';preview.style.textShadow='none';preview.style.webkitTextStroke=floatingStyle.outline?'1.5px #000':'0 transparent';preview.style.paintOrder='stroke fill';}
  if($('captionStyleControls'))syncCaptionControls($('captionStyleControls'),floatingStyle,lanes);
  if(pipWindow&&!pipWindow.closed){
   pipWindow.document.getElementById('floatingCaptionCSS').textContent=floatingCaptionCSS(floatingStyle);

@@ -13,6 +13,7 @@ struct CaptionPayload {
     let size: CGFloat
     let lines: Int
     let outline: Bool
+    let backplate: Bool
     let visible: Bool
     init(_ object: [String: Any]) throws {
         let raw = object["lanes"] as? [[String: Any]] ?? []
@@ -27,10 +28,11 @@ struct CaptionPayload {
         let style = object["style"] as? [String: Any] ?? [:]
         let c = style["color"] as? String ?? "#ffffff"
         color = c.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil ? c : "#ffffff"
-        let value = (style["size"] as? NSNumber)?.doubleValue ?? 32
-        size = CGFloat(value.isFinite ? min(64, max(18, value)) : 32)
-        lines = min(5, max(1, (style["lines"] as? Int) ?? 3))
+        let value = (style["size"] as? NSNumber)?.doubleValue ?? 48
+        size = CGFloat(value.isFinite ? min(96, max(18, value)) : 48)
+        lines = min(5, max(1, (style["lines"] as? Int) ?? 2))
         outline = style["outline"] as? Bool ?? true
+        backplate = style["backplate"] as? Bool ?? false
         visible = object["visible"] as? Bool ?? true
         lanes = parsed
     }
@@ -77,11 +79,13 @@ final class CaptionBridge {
     let onCaption: (CaptionPayload) -> Void
     let onState: (String) -> Void
     var listener: NWListener?
+    var port: UInt16 = bridgePort
     let queue = DispatchQueue(label: "tranru.caption-bridge")
     init(code: String, onCaption: @escaping (CaptionPayload) -> Void, onState: @escaping (String) -> Void) {
         self.code = code; self.onCaption = onCaption; self.onState = onState
     }
     func start(port: UInt16 = bridgePort) throws {
+        self.port = port
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host("127.0.0.1"), port: NWEndpoint.Port(rawValue: port)!)
         let server = try NWListener(using: parameters)
@@ -112,11 +116,11 @@ final class CaptionBridge {
     func handle(_ request: HTTPRequest, _ connection: NWConnection) {
         let origin = request.headers["origin"]
         guard origin == nil || allowedOrigins.contains(origin!) else { reply(connection, status: 403, object: ["error": "不允許的網站來源"], origin: nil); return }
-        guard let host = request.headers["host"], host == "127.0.0.1:\(bridgePort)" || host == "localhost:\(bridgePort)" else { reply(connection, status: 403, object: ["error": "不允許的主機"], origin: origin); return }
+        guard let host = request.headers["host"], host == "127.0.0.1:\(port)" || host == "localhost:\(port)" else { reply(connection, status: 403, object: ["error": "不允許的主機"], origin: origin); return }
         if request.method == "OPTIONS" { reply(connection, status: 200, object: ["ok": true], origin: origin); return }
         guard request.method == "POST", ["/hello", "/captions"].contains(request.path) else { reply(connection, status: 404, object: ["error": "找不到端點"], origin: origin); return }
         guard tokenMatches(request.headers["authorization"] ?? "", "Bearer " + code) else { reply(connection, status: 401, object: ["error": "連線碼不正確，請從 Mac 工具重新複製"], origin: origin); return }
-        if request.path == "/hello" { reply(connection, status: 200, object: ["app": appID, "version": "1.0.0"], origin: origin); return }
+        if request.path == "/hello" { reply(connection, status: 200, object: ["app": appID, "version": "1.1.0"], origin: origin); return }
         do {
             guard let object = try JSONSerialization.jsonObject(with: request.body) as? [String: Any] else { throw BridgeError.invalid }
             let payload = try CaptionPayload(object)
@@ -137,6 +141,58 @@ final class CaptionBridge {
 
 final class CaptionView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+// Draw complete trailing lines, then fill glyphs over a separate outline pass.
+// A single layout is shared by both passes so strokes cannot shift the text.
+final class CaptionCanvas: NSView {
+    override var isFlipped: Bool { true }
+    var text = ""
+    var fontSize: CGFloat = 48
+    var foreground = NSColor.white
+    var outline = true
+    var backplate = false
+    var lines = 2
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        let font = NSFont(name: "PingFangTC-Semibold", size: fontSize) ?? NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.minimumLineHeight = fontSize * 1.5
+        paragraph.maximumLineHeight = fontSize * 1.5
+        let storage = NSTextStorage(string: text.trimmingCharacters(in: .whitespacesAndNewlines), attributes: [.font: font, .foregroundColor: foreground, .paragraphStyle: paragraph, .kern: fontSize * 0.02])
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: max(1, bounds.width - 32), height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        storage.addLayoutManager(layout); layout.addTextContainer(container); layout.ensureLayout(for: container)
+        var fragments: [(NSRect, NSRange)] = []
+        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { rect, _, _, range, _ in fragments.append((rect, range)) }
+        let count = min(lines, max(1, Int((bounds.height - 12) / (fontSize * 1.5))))
+        let visible = Array(fragments.suffix(count))
+        guard let first = visible.first, let last = visible.last else { return }
+        let range = NSRange(location: first.1.location, length: NSMaxRange(last.1) - first.1.location)
+        let origin = NSPoint(x: 16, y: 6 - first.0.minY)
+        if backplate {
+            let rgb = foreground.usingColorSpace(.sRGB) ?? .white
+            let bright = rgb.redComponent * 0.2126 + rgb.greenComponent * 0.7152 + rgb.blueComponent * 0.0722 > 0.45
+            (bright ? NSColor.black.withAlphaComponent(0.78) : NSColor.white.withAlphaComponent(0.9)).setFill()
+            for (line, glyphs) in visible {
+                var characters = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+                let string = storage.string as NSString
+                while characters.length > 0, let scalar = UnicodeScalar(Int(string.character(at: NSMaxRange(characters)-1))), CharacterSet.whitespacesAndNewlines.contains(scalar) { characters.length -= 1 }
+                let ink = layout.glyphRange(forCharacterRange: characters, actualCharacterRange: nil)
+                let glyphRect = layout.boundingRect(forGlyphRange: ink, in: container)
+                let rect = NSRect(x: glyphRect.minX + origin.x - 9, y: line.minY + origin.y + 2, width: glyphRect.width + 18, height: line.height - 4)
+                NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+            }
+        }
+        let all = NSRange(location: 0, length: storage.length)
+        if outline {
+            storage.addAttributes([.strokeColor: NSColor.black, .strokeWidth: 6.0], range: all)
+            layout.drawGlyphs(forGlyphRange: range, at: origin)
+            storage.removeAttribute(.strokeWidth, range: all); storage.removeAttribute(.strokeColor, range: all)
+        }
+        layout.drawGlyphs(forGlyphRange: range, at: origin)
+    }
 }
 final class OverlayController {
     let window: NSPanel
@@ -165,8 +221,8 @@ final class OverlayController {
         guard !lanes.isEmpty else { window.orderOut(nil); return }
         let screen = window.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = screen.visibleFrame
-        let size = min(86, max(14, value.size * fontScale))
-        let height = min(frame.height * 0.75, CGFloat(lanes.count) * (size * 1.48 * CGFloat(value.lines) + (showLabels ? 20 : 0)) + 12)
+        let size = min(144, max(18, value.size * fontScale))
+        let height = min(frame.height * 0.75, CGFloat(lanes.count) * (size * 1.5 * CGFloat(value.lines) + 12 + (showLabels ? 20 : 0)) + 12)
         let width = frame.width * widthRatio
         var origin = window.frame.origin
         if !window.isVisible || reposition {
@@ -185,26 +241,16 @@ final class OverlayController {
                 let label = NSTextField(labelWithString: lane.label); label.font = .systemFont(ofSize: 11); label.textColor = color(value.color).withAlphaComponent(0.8)
                 label.alignment = .center; label.frame = NSRect(x: 0, y: y + laneHeight - 18, width: width, height: 18); root.addSubview(label)
             }
-            let scroll = NSScrollView(frame: NSRect(x: 4, y: y, width: width-8, height: laneHeight-labelHeight))
-            scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.borderType = .noBorder; scroll.hasVerticalScroller = false; scroll.hasHorizontalScroller = false
-            let text = NSTextView(frame: NSRect(x: 0, y: 0, width: width-8, height: laneHeight-labelHeight))
-            text.isEditable = false; text.isSelectable = false; text.drawsBackground = false
-            text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
-            text.textContainer?.widthTracksTextView = true; text.textContainer?.containerSize = NSSize(width: width-8, height: .greatestFiniteMagnitude)
-            text.textContainerInset = NSSize(width: 8, height: 0)
-            let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center; paragraph.lineSpacing = laneFont * 0.12
-            var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: laneFont, weight: .semibold), .foregroundColor: color(value.color), .paragraphStyle: paragraph]
-            if value.outline { attributes[.strokeColor] = NSColor.black; attributes[.strokeWidth] = -3.0; let shadow = NSShadow(); shadow.shadowColor = NSColor.black.withAlphaComponent(0.9); shadow.shadowBlurRadius = 4; shadow.shadowOffset = NSSize(width: 0, height: -1); attributes[.shadow] = shadow }
-            text.textStorage?.setAttributedString(NSAttributedString(string: lane.text, attributes: attributes))
-            scroll.documentView = text; root.addSubview(scroll)
-            text.layoutManager?.ensureLayout(for: text.textContainer!); text.sizeToFit()
-            text.scrollRangeToVisible(NSRange(location: (lane.text as NSString).length, length: 0))
+            let canvas = CaptionCanvas(frame: NSRect(x: 4, y: y, width: width-8, height: laneHeight-labelHeight))
+            canvas.text = lane.text; canvas.fontSize = laneFont; canvas.foreground = color(value.color)
+            canvas.outline = value.outline; canvas.backplate = value.backplate; canvas.lines = value.lines
+            root.addSubview(canvas)
         }
         window.contentView = root
         window.orderFrontRegardless()
     }
     func refresh() { if let payload = payload { update(payload, reposition: true) } }
-    func demo() { hiddenByUser = false; if let demo = try? CaptionPayload(["lanes": [["label":"繁體中文", "text":"這是透明字幕示範，後方簡報仍然看得見。"]], "style": ["color":"#ffffff", "size":38, "lines":2, "outline":true]]) { update(demo, reposition: true) } }
+    func demo() { hiddenByUser = false; if let demo = try? CaptionPayload(["lanes": [["label":"繁體中文", "text":"這是透明字幕示範，後方簡報仍然看得見。"]], "style": ["color":"#ffffff", "size":48, "lines":2, "outline":true]]) { update(demo, reposition: true) } }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -276,14 +322,28 @@ func protocolTests() throws {
     }
     precondition(tokenMatches("same", "same") && !tokenMatches("same", "wrong"))
     let payload = try CaptionPayload(["lanes": [["text":"你好 Bonjour 日本語" ]], "style": ["color":"bad", "size":999, "lines":99]])
-    precondition(payload.color == "#ffffff" && payload.size == 64 && payload.lines == 5)
+    precondition(payload.color == "#ffffff" && payload.size == 96 && payload.lines == 5)
     print("Native protocol, authentication and payload validation passed")
 }
 if CommandLine.arguments.contains("--self-test") {
     do { try protocolTests(); exit(0) } catch { fputs("Native self-test failed\n", stderr); exit(1) }
+} else if let index = CommandLine.arguments.firstIndex(of: "--render-preview"), CommandLine.arguments.count > index + 1 {
+    _ = NSApplication.shared
+    let root = NSView(frame: NSRect(x: 0, y: 0, width: 1200, height: 560))
+    root.wantsLayer = true; root.layer?.backgroundColor = NSColor(calibratedWhite: 0.8, alpha: 1).cgColor
+    for i in 0..<2 {
+        let view = CaptionCanvas(frame: NSRect(x: 0, y: CGFloat(i * 280), width: 1200, height: 250))
+        view.text = i == 0 ? "讓字幕跟著演講，簡報保持清楚。\n最新的句子，清楚顯示在眼前。" : "Clear captions follow every speaker.\nKeep the latest sentence in view."
+        view.fontSize = 48; view.backplate = i == 0
+        root.addSubview(view)
+    }
+    if let bitmap = root.bitmapImageRepForCachingDisplay(in: root.bounds) {
+        root.cacheDisplay(in: root.bounds, to: bitmap)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+    }
 } else if CommandLine.arguments.contains("--bridge-test") {
     let server = CaptionBridge(code: String(repeating: "a", count: 32), onCaption: { _ in }, onState: { _ in })
-    do { try server.start(); withExtendedLifetime(server) { dispatchMain() } } catch { exit(1) }
+    do { try server.start(port: 8797); withExtendedLifetime(server) { dispatchMain() } } catch { exit(1) }
 } else {
     let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.setActivationPolicy(.regular); app.run()
 }

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {captionStyle,DEFAULT_CAPTION_STYLE,CAPTION_PRESETS,visibleCaptionLanes,floatingCaptionCSS,renderFloatingCaptions,bindCaptionControls,syncCaptionControls} from './public/floating-captions.js';
+import {loadCaptionStyle,captionStyle,DEFAULT_CAPTION_STYLE,CAPTION_PRESETS,visibleCaptionLanes,floatingCaptionCSS,renderFloatingCaptions,bindCaptionControls,syncCaptionControls} from './public/floating-captions.js';
 const lanes=[{id:'source',label:'講者原文',text:'hello',source:true},{id:'Chinese',label:'中文',text:'你好'},{id:'French',label:'法文',text:'Bonjour'}];
 test('floating captions default to one translation language without repeating the original',()=>{
  assert.deepEqual(visibleCaptionLanes(lanes,DEFAULT_CAPTION_STYLE).map(l=>l.id),['Chinese']);
@@ -10,7 +10,7 @@ test('floating captions default to one translation language without repeating th
 });
 test('caption colors and numeric settings are bounded and cannot inject stylesheet rules',()=>{
  const s=captionStyle({color:'red; } body {display:none}',background:'#abcdef',size:1000,lines:-5});
- assert.equal(s.color,'#ffffff');assert.equal(s.background,'#abcdef');assert.equal(s.size,64);assert.equal(s.lines,1);
+ assert.equal(s.color,'#ffffff');assert.equal(s.background,'#abcdef');assert.equal(s.size,96);assert.equal(s.lines,1);
  assert.doesNotMatch(floatingCaptionCSS(s),/red;|body \{display:none/);assert.match(floatingCaptionCSS(s),/background:#abcdef/);
  assert.equal(captionStyle({size:-2,lines:100}).size,18);assert.equal(captionStyle({lines:100}).lines,5);
  for(const preset of Object.values(CAPTION_PRESETS))assert.match(preset.color,/^#[a-f0-9]{6}$/i);
@@ -29,4 +29,12 @@ test('color, size and checkbox controls stay synchronized and emit the selected 
  const root={querySelectorAll:q=>q==='[data-caption-key]'?fields:[output]};
  syncCaptionControls(root,{...DEFAULT_CAPTION_STYLE,size:40,language:'French'},lanes);assert.equal(output.textContent,'40 px');assert.equal(fields[0].value,'French');assert.match(fields[0].innerHTML,/法文/);assert.equal(fields[2].checked,true);
  bindCaptionControls(root,(key,value)=>changes.push([key,value]));fields[1].value='#abcdef';fields[1].oninput();fields[2].checked=false;fields[2].oninput();assert.deepEqual(changes,[['color','#abcdef'],['outline',false]]);
+});
+
+test('readability migration enlarges old defaults once while preserving custom color and future choices',()=>{
+ const upgraded=loadCaptionStyle({size:32,lines:3,color:'#ffe66d'});
+ assert.equal(upgraded.size,48);assert.equal(upgraded.lines,2);assert.equal(upgraded.color,'#ffe66d');
+ assert.equal(loadCaptionStyle({...upgraded,size:24}).size,24);
+ assert.match(floatingCaptionCSS({...DEFAULT_CAPTION_STYLE,backplate:true,color:'#172033'}),/rgba\(255,255,255,.9\)/);
+ assert.match(floatingCaptionCSS(DEFAULT_CAPTION_STYLE),/paint-order:stroke fill/);
 });

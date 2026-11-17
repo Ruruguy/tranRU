@@ -571,14 +571,14 @@
   <dialog id="captionStyleDialog" class="caption-style-dialog">
     <form method="dialog"><button class="close" aria-label="關閉字幕樣式">×</button></form>
     <h2>懸浮字幕與樣式</h2>
-    <p class="caption-style-intro">建議先用白字與細黑描邊，僅顯示主要翻譯語言，減少遮住簡報。</p>
+    <p class="caption-style-intro">建議 48 字級、兩行實心黑體。白字搭配清晰黑邊；複雜投影片可加文字護底。</p>
     <div id="captionStylePreview" class="caption-style-preview">讓字幕跟著演講，簡報保持清楚。</div>
     <div id="captionStyleControls"></div>
     <p class="caption-style-note">網頁懸浮窗仍有視窗底色與瀏覽器外框；真正透出後方 PPT 的去背文字，需要桌面透明字幕工具。一般彈出視窗不保證置頂。</p>
     <section class="desktop-caption-setup" aria-label="Mac 透明字幕">
       <h3>Mac 透明字幕 · 只剩文字，PPT 真正透出</h3>
       <p>先開啟 Mac 工具，複製它顯示的連線碼。這不是 Gemini／OpenAI 金鑰。</p>
-      <a id="desktopCaptionDownload" href="https://github.com/Ruruguy/tranRU/releases/download/mac-overlay-v1.0.0/tranRU-Mac-Overlay.zip" target="_blank" rel="noopener noreferrer">下載 Mac 透明字幕工具（macOS 14+，Apple Silicon／Intel）</a>
+      <a id="desktopCaptionDownload" href="https://github.com/Ruruguy/tranRU/releases/download/mac-overlay-v1.1.0/tranRU-Mac-Overlay.zip" target="_blank" rel="noopener noreferrer">下載 Mac 透明字幕工具（macOS 14+，Apple Silicon／Intel）</a>
       <label for="desktopCaptionCode">Mac 工具連線碼</label>
       <input id="desktopCaptionCode" type="password" autocomplete="off" spellcheck="false" maxlength="32" placeholder="貼上工具提供的連線碼">
       <div class="desktop-caption-actions"><button type="button" id="desktopCaptionConnect">連接 Mac 透明字幕</button><button type="button" id="desktopCaptionDisconnect">停止同步並隱藏</button></div>

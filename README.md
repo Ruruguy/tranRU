@@ -42,7 +42,7 @@ npm start
 點「懸浮字幕」開啟樣式與連線設定。預設白字、黑色描邊、只顯示主要譯文，可自訂字色、字級、行數、語言與是否顯示原文；另提供亮底深字與黃字高對比。演講與雙向溝通均支援。
 
 - 網頁置頂窗仍有實色底色與瀏覽器外框，普通彈出視窗不保證置頂。
-- Mac 真正去背：下載並開啟 [tranRU Mac 透明字幕工具](https://github.com/Ruruguy/tranRU/releases/download/mac-overlay-v1.0.0/tranRU-Mac-Overlay.zip)，複製工具連線碼到網站，再按「連接 Mac 透明字幕」。支援 macOS 14 以上、Apple Silicon 與 Intel；尚未經 Apple 公證。
+- Mac 真正去背：下載並開啟 [tranRU Mac 透明字幕工具](https://github.com/Ruruguy/tranRU/releases/download/mac-overlay-v1.1.0/tranRU-Mac-Overlay.zip)，複製工具連線碼到網站，再按「連接 Mac 透明字幕」。支援 macOS 14 以上、Apple Silicon 與 Intel；尚未經 Apple 公證。
 - 工具只在這台 Mac 接收目前顯示的字幕與樣式，不接收 API 金鑰或錄音、不記錄字幕。連線碼只留在記憶體，工具重新開啟會更換。
 - 首次連線時，瀏覽器可能需要允許存取本機／這台裝置。請使用支援該連線方式的近期 Chrome／Edge；不要停用瀏覽器或系統的整體安全防護。
 - Mac 工具預設滑鼠穿透，支援上下位置、拖曳（解除鎖定後）、寬度及字體縮放。一般停止收音會保留最後字幕；停止同步會隱藏字幕。

@@ -1813,7 +1813,7 @@ body.presenting .presentation-body,body.presenting #convPanes .conv-pane-body {p
 
 .caption-style-dialog{width:min(620px,92vw);max-height:90dvh;overflow:auto;border:1px solid var(--border-ash);border-radius:18px;padding:24px;background:#111622;color:#fff;}
 .caption-style-intro,.caption-style-note{font-size:12px;color:var(--text-pale-mist);line-height:1.6;}
-.caption-style-preview{margin:16px 0;padding:24px 20px;border:1px solid var(--border-ash);border-radius:12px;line-height:1.45;font-weight:650;max-height:200px;overflow:auto;}
+.caption-style-preview{margin:16px 0;padding:24px 20px;border:1px solid var(--border-ash);border-radius:12px;font-family:"PingFang TC","Noto Sans TC",sans-serif;line-height:1.5;font-weight:600;letter-spacing:.02em;max-height:220px;overflow:auto;}
 .caption-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
 .caption-controls label{display:flex;flex-direction:column;gap:8px;min-width:0;font-size:13px;}
 .caption-controls select,.caption-controls input{width:100%;min-width:0;}
