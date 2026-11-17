@@ -1,3 +1,5 @@
+import {DesktopCaptionClient} from './desktop-captions.js';
+import {DEFAULT_CAPTION_STYLE,CAPTION_PRESETS,captionStyle,visibleCaptionLanes,floatingCaptionCSS,renderFloatingCaptions,captionControlsMarkup,syncCaptionControls,bindCaptionControls} from './floating-captions.js';
 import {ConversationRecognition,validateConversationEngine} from './conversation-engine.js';
 import {apiFetch as fetch} from './api-client.js';
 import {classifyServiceError} from './service-errors.js';
@@ -62,6 +64,7 @@ let elapsed = 0;
 let records = [];
 let summarySessionId = 'legacy';
 let pipWindow = null;
+let desktopCaptions=null;
 let speechRecognizer = null;
 let currentNativeRecord = null;
 
@@ -1649,53 +1652,81 @@ function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
-function updatePiP() {
-  if (!pipWindow || !pipWindow.document) return;
-  const container = pipWindow.document.getElementById('pipRows');
-  const clockElem = pipWindow.document.getElementById('pipClock');
-  if (clockElem && $('clock')) clockElem.textContent = $('clock').textContent;
-  if (!container) return;
-
-  const recent = records.slice(-3);
-  if (!recent.length) {
-    container.innerHTML = '<div style="color:#788b72;padding:24px;text-align:center;">等待演講即時音訊…</div>';
-    return;
-  }
-
-  container.innerHTML = recent.map(r => `
-    <div class="pip-row">
-      <div class="pip-original">${escapeHtml(r.text || r.interim || '正在辨識演講語音…')}</div>
-      <div class="pip-translation">${r.secondary ? escapeHtml(r.target)+' · ' : ''}${escapeHtml(r.translation || (r.state === 'streaming' ? '正在即時翻譯…' : ''))}</div>
-    </div>
-  `).join('');
-  container.scrollTop = container.scrollHeight;
-}
-
-function setupPiPDoc(doc) {
-  doc.body.className = 'pip-mode';
-  [...document.styleSheets].forEach(sheet => {
-    try {
-      const rules = [...sheet.cssRules].map(r => r.cssText).join('');
-      const style = doc.createElement('style');
-      style.textContent = rules;
-      doc.head.appendChild(style);
-    } catch {
-      if (sheet.href) {
-        const link = doc.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = sheet.href;
-        doc.head.appendChild(link);
-      }
-    }
+let floatingStyle={...DEFAULT_CAPTION_STYLE};
+try {floatingStyle=captionStyle(JSON.parse(localStorage.getItem('tranru_caption_style'))||DEFAULT_CAPTION_STYLE);}catch{}
+function floatingLanes(){
+ if($('conversationView')?.style.display==='block'){
+  const count=Number($('convLangCount')?.value||3);
+  return ['convLiveZh','convLiveEn','convLiveJa','convLiveKo'].slice(0,count).map((id,index)=>{
+   const select=$('convLang'+String.fromCharCode(65+index));
+   const target=select?.selectedOptions?.[0]?.dataset.target||'';
+   const seen=new Set();
+   const manual=convRecords.filter(r=>r.sourceTarget===target||r.target===target).filter(r=>{const key=r.sourceTarget===target?JSON.stringify([r.time,r.text,r.sourceTarget]):r.id;if(seen.has(key))return false;seen.add(key);return true;}).slice(-2).map(r=>r.sourceTarget===target?r.text:r.translation).filter(Boolean).join('\n');
+   return {id:target,label:$('paneHead'+(index+1))?.textContent||target,text:$(id)?.dataset.empty==='no'?$(id).textContent:manual};
   });
-
-  doc.body.innerHTML = `
-    <div class="pip-header">
-      <span>LECTURE LENS · 即時置頂字幕</span>
-      <span id="pipClock">${$('clock')?.textContent || '00:00:00'}</span>
-    </div>
-    <div id="pipRows"></div>
-  `;
+ }
+ const dual=$('dualTranslation').checked,triple=dual&&$('tripleTranslation').checked;
+ const targets=[$('target').value,$('secondTarget').value,$('thirdTarget').value];
+ const labels=['講者原文',...['target','secondTarget','thirdTarget'].map(id=>$(id).selectedOptions[0]?.textContent||$(id).value)];
+ return presentationLanes(previewDisplayRecords(),{dual,triple,targets,labels,continuous:true,includeSpeaker:true}).map((lane,index)=>({id:index===0?'source':targets[index-1],label:lane.label,text:lane.items.slice(-1).map(item=>item.text).join('\n'),source:index===0}));
+}
+function updatePiP(){
+ if((!pipWindow||pipWindow.closed)&&!desktopCaptions?.active)return;
+ const lanes=floatingLanes();
+ if(desktopCaptions?.active)desktopCaptions.send({lanes:visibleCaptionLanes(lanes,floatingStyle),style:floatingStyle});
+ if(!pipWindow||pipWindow.closed)return;
+ const settings=pipWindow.document.getElementById('pipSettings');
+ const languageSignature=JSON.stringify(lanes.map(l=>[l.id,l.label]));
+ if(settings&&settings.dataset.languages!==languageSignature){syncCaptionControls(settings,floatingStyle,lanes);settings.dataset.languages=languageSignature;}
+ renderFloatingCaptions(pipWindow.document,lanes,floatingStyle);
+}
+function refreshFloatingStyle(){
+ const lanes=floatingLanes();
+ const preview=$('captionStylePreview');
+ if(preview){preview.style.background=floatingStyle.background;preview.style.color=floatingStyle.color;preview.style.fontSize=floatingStyle.size+'px';preview.style.textShadow=floatingStyle.outline?'1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,0 2px 7px #000':'none';}
+ if($('captionStyleControls'))syncCaptionControls($('captionStyleControls'),floatingStyle,lanes);
+ if(pipWindow&&!pipWindow.closed){
+  pipWindow.document.getElementById('floatingCaptionCSS').textContent=floatingCaptionCSS(floatingStyle);
+  syncCaptionControls(pipWindow.document.getElementById('pipSettings'),floatingStyle,lanes);
+ }
+ updatePiP();
+}
+function changeFloatingStyle(key,value){
+ floatingStyle=captionStyle(key==='preset'&&CAPTION_PRESETS[value]?{...floatingStyle,...CAPTION_PRESETS[value],preset:value}:{...floatingStyle,[key]:value,...(['color','background','outline'].includes(key)?{preset:'custom'}:{})});
+ try {localStorage.setItem('tranru_caption_style',JSON.stringify(floatingStyle));}catch{}
+ refreshFloatingStyle();
+}
+function openFloatingStyles(){refreshFloatingStyle();$('captionStyleDialog').showModal();}
+if($('captionStyleControls')){
+ $('captionStyleControls').innerHTML=captionControlsMarkup();
+ bindCaptionControls($('captionStyleControls'),changeFloatingStyle);
+ if($('pipStyle'))$('pipStyle').onclick=openFloatingStyles;
+ $('captionStyleOpenPiP').onclick=togglePiP;
+}
+function desktopStatus(message){if($('desktopCaptionStatus'))$('desktopCaptionStatus').textContent=message;}
+if($('desktopCaptionConnect')){
+ $('desktopCaptionConnect').onclick=async()=>{
+  const button=$('desktopCaptionConnect');button.disabled=true;desktopStatus('正在連接 Mac 工具，請留意瀏覽器的本機網路權限提示…');
+  try{
+   desktopCaptions?.close();
+   desktopCaptions=new DesktopCaptionClient({onStatus:desktopStatus});
+   const lanes=floatingLanes();
+   await desktopCaptions.connect($('desktopCaptionCode').value,{lanes:visibleCaptionLanes(lanes,floatingStyle),style:floatingStyle});
+   if(desktopCaptions.active)$('desktopCaptionCode').value='';
+  }catch(error){desktopStatus(error.message);}finally{button.disabled=false;}
+ };
+ $('desktopCaptionDisconnect').onclick=async()=>{await desktopCaptions?.disconnect();};
+ window.addEventListener('pagehide',()=>desktopCaptions?.close());
+}
+function setupPiPDoc(doc){
+ doc.title='tranRU · 懸浮字幕';doc.body.className='pip-mode';
+ const style=doc.createElement('style');style.id='floatingCaptionCSS';style.textContent=floatingCaptionCSS(floatingStyle);doc.head.append(style);
+ doc.body.innerHTML='<div class="pip-tools"><span>tranRU · 大佛A-Ru</span><button id="pipSmaller" aria-label="縮小懸浮字幕">－</button><button id="pipBigger" aria-label="放大懸浮字幕">＋</button><button id="pipStyleToggle" aria-expanded="false">樣式</button></div><div id="pipRows"></div><section id="pipSettings" class="pip-settings" aria-label="懸浮字幕樣式">'+captionControlsMarkup()+'<p>瀏覽器懸浮窗有實色底色；真正去背需要桌面透明字幕工具。</p></section>';
+ doc.getElementById('pipSmaller').onclick=()=>changeFloatingStyle('size',floatingStyle.size-2);
+ doc.getElementById('pipBigger').onclick=()=>changeFloatingStyle('size',floatingStyle.size+2);
+ doc.getElementById('pipStyleToggle').onclick=()=>{const open=doc.getElementById('pipSettings').classList.toggle('open');doc.getElementById('pipStyleToggle').setAttribute('aria-expanded',String(open));};
+ bindCaptionControls(doc.getElementById('pipSettings'),changeFloatingStyle);
+ syncCaptionControls(doc.getElementById('pipSettings'),floatingStyle,floatingLanes());
 }
 
 async function togglePiP() {
@@ -1706,7 +1737,7 @@ async function togglePiP() {
   }
 
   if (!('documentPictureInPicture' in window)) {
-    const popup = window.open('', 'LectureLensPiP', 'width=520,height=280,menubar=no,toolbar=no,location=no,status=no');
+    const popup = window.open('', 'tranRUCaptions', 'width=840,height=240,menubar=no,toolbar=no,location=no,status=no');
     if (!popup) {
       alert('請允許開啟彈出視窗以啟用懸浮字幕，或使用 Chrome 116+ 桌面版體驗原生置頂懸浮窗。');
       return;
@@ -1720,8 +1751,8 @@ async function togglePiP() {
 
   try {
     pipWindow = await window.documentPictureInPicture.requestWindow({
-      width: 520,
-      height: 280
+      width: 840,
+      height: 240
     });
     setupPiPDoc(pipWindow.document);
     pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
@@ -1731,7 +1762,7 @@ async function togglePiP() {
   }
 }
 
-if ($('pip')) $('pip').onclick = togglePiP;
+if ($('pip')) $('pip').onclick = openFloatingStyles;
 
 // --- One-Click AI Lecture Summary ---
 async function generateSummary() {
@@ -1832,6 +1863,7 @@ async function switchMode(mode) {
     if ($('conversationView')) $('conversationView').style.display = 'none';
     if ($('lectureView')) $('lectureView').style.display = 'block';
   }
+  if(typeof updatePiP==='function')updatePiP();
 }
 
 if ($('navLecture')) $('navLecture').onclick = () => switchMode('lecture');
@@ -1982,6 +2014,7 @@ function drawConvFeed() {
   }
 
   if ($('convCount')) $('convCount').textContent = `${convRecords.length} 則對話`;
+  if(typeof updatePiP==='function')updatePiP();
 }
 
 async function translateConvRecord(record, text, targetLangStr, ttsLangCode, sourceLangCode) {
@@ -2344,6 +2377,7 @@ function appendConvLive(id,text,replace=false) {
   if(live){live.textContent=el.textContent;live.classList?.add('active');}
   const body=$('paneBody'+(index+1));if(body)body.scrollTop=body.scrollHeight;
  }
+ if(typeof updatePiP==='function')updatePiP();
 }
 function resetConvLiveText(){
  for(const id of ['convLiveSource','convLiveZh','convLiveEn','convLiveJa','convLiveKo']){const el=$(id);if(el){el.textContent='';if(el.dataset)el.dataset.empty='no';}}
