@@ -3,8 +3,19 @@
 const DATA = `
 現場與交班|到院前救護|prehospital care|
 現場與交班|緊急醫療救護系統|emergency medical services|EMS
+現場與交班|團隊資源管理|Team Resource Management|TRM;緊急救護團隊資源管理|チームリソースマネジメント
+現場與交班|勤前簡報|team briefing|Briefing;任務簡報;分工簡報|ブリーフィング
+現場與交班|事後檢討|debriefing|團隊回饋;演練檢討|デブリーフィング
+現場與交班|團隊整合|team integration|角色分工;重新分工|チーム統合
+現場與交班|資訊交接|information handover|現場交接|情報引き継ぎ
+現場與交班|衝突處理|conflict resolution|意見衝突處理|コンフリクトマネジメント
+現場與交班|到院交班|hospital handoff|到院後交班;醫院交接|病院引き継ぎ
+現場與交班|教練式心肺復甦指導|CPR coaching|coaching CPR|CPRコーチング
+現場與交班|復甦安妮|CPR training manikin|Resusci Anne;安妮|蘇生訓練人形
+現場與交班|救護三寶|EMS primary response kit|三寶;三套三寶|救急基本装備セット
 現場與交班|救護技術員|emergency medical technician|EMT
-現場與交班|高級救護技術員|paramedic|
+現場與交班|中級救護技術員|EMT-Intermediate|EMT-2;T2|中級救急救命隊員
+現場與交班|高級救護技術員|paramedic|EMT-P;TP;專救|救急救命士
 現場與交班|現場安全|scene safety|
 現場與交班|大量傷病患事件|mass casualty incident|MCI
 現場與交班|檢傷分類|triage|

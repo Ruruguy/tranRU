@@ -2,7 +2,7 @@ import {MEDICAL_GLOSSARY} from './medical-glossary.js';
 // Hosted mode keeps the visitor's key in the browser session only.
 export function transcriptionSetup(language='auto') {
  const languages={en:'en-US',ja:'ja-JP',ko:'ko-KR',zh:'cmn-Hans-CN',es:'es-ES',fr:'fr-FR',de:'de-DE',bn:'bn-BD'};
- const priority=['休克','意識不清','意識改變','意識喪失','敗血症','敗血性休克','心因性休克','低血容性休克','呼吸暫停','新生兒復甦','正壓通氣','氣管內插管','聲門上呼吸道','格拉斯哥昏迷指數','NRP','MR SOPA','Apgar','CPR'];
+ const priority=['休克','意識不清','意識改變','意識喪失','敗血症','敗血性休克','心因性休克','低血容性休克','呼吸暫停','新生兒復甦','正壓通氣','氣管內插管','聲門上呼吸道','格拉斯哥昏迷指數','NRP','MR SOPA','Apgar','CPR','TRM','團隊資源管理','Briefing','Debriefing','到院交班','資訊交接','coaching CPR','EMT-P'];
  const terms=[...new Set([...priority,...MEDICAL_GLOSSARY.flatMap(item=>[item.zh,item.en,item.ja].filter(Boolean))])].slice(0,100);
  return {setup:{model:'models/gemini-3.5-transcribe-live',generationConfig:{responseModalities:['TEXT']},inputAudioTranscription:{languageCodes:languages[language]?[languages[language]]:[],customVocabulary:terms,mode:'VERBATIM'}}};
 }

@@ -17,9 +17,10 @@ function fixture(engine='precision',options={}){
  const recognition=new ConversationRecognition({engine,language:'zh',targets:['Traditional Chinese (Taiwan)','English','German','French'],token:'fake-session',azureKey:'fake-azure',azureRegion:'eastasia',Client,Azure,Recognition,Audio,mediaDevices:{getUserMedia:async()=>audioStream},fetcher,onCaption:(index,text)=>updates.push({index,text}),onStatus:t=>statuses.push(t),onFailure:e=>failures.push(e),...options});
  return {recognition,clients,recognizers,requests,updates,failures,statuses,processors,audioStream,get stopped(){return stopped;}};
 }
-test('conversation offers exactly the same six recognition engines as lecture',()=>{
+test('conversation and lecture offer the curated four recommended recognition engines',()=>{
  const html=readFileSync('public/index.html','utf8');
  const values=id=>[...html.match(new RegExp('<select id="'+id+'">([\\s\\S]*?)</select>'))[1].matchAll(/value="([^"]+)"/g)].map(m=>m[1]);
+ assert.deepEqual(values('engine'),['gemini','precision','free','vad']);
  assert.deepEqual(values('convSpeechEngine'),values('engine'));
 });
 test('engine requirements reject missing keys and unsupported auto detection before microphone capture',()=>{

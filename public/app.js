@@ -2559,9 +2559,17 @@ const DEFAULT_FIRE_EMS_GLOSSARY = `【消防·救護·急診醫療中英日專�
 - 閃燃/爆燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
 - 局限空間/繩索救援: Confined space / Technical rope rescue | 閉鎖空間救助・ロープ救助
 
-[人員體系與大量傷患 EMS & Triage]
+[人員體系與大量傷患 EMS & Triage & TRM]
 - 救護技術員(EMT): Emergency Medical Technician | 救急隊員
-- 高級救護技術員(專救): Paramedic (EMT-P) | 救急救命士
+- 中級救護技術員(T2): EMT-Intermediate (EMT-2) | 中級救急救命隊員
+- 高級救護技術員(專救/TP): Paramedic (EMT-P) | 救急救命士
+- 團隊資源管理(TRM): Team Resource Management (TRM) | チームリソースマネジメント
+- 勤前簡報與分工(Briefing): Team briefing & role assignment | ブリーフィング・役割分担
+- 事後檢討與團隊回饋(Debriefing): Debriefing & team feedback | デブリーフィング
+- 團隊整合與資訊交接: Team integration & information handover | チーム統合・情報引き継ぎ
+- 衝突處理與到院交班: Conflict resolution & hospital handoff | コンフリクト対処・病院引き継ぎ
+- 教練式CPR指導(coaching CPR): CPR coaching | CPRコーチング
+- 復甦安妮/救護三寶: CPR training manikin (Resusci Anne) / EMS primary response kit | 蘇生訓練人形・救急基本装備
 - 救護車/派遣中心: Ambulance / 911 dispatch | 救急車・指令センター
 - 大量傷病患(MCI): Mass Casualty Incident | 多数傷病者事故
 - 檢傷分類: Triage (START triage) | トリアージ (赤・黄・緑・黑)

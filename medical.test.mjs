@@ -63,3 +63,11 @@ test('newborn and Apgar terminology matches Chinese, English and Japanese withou
  assert.ok(legacy);assert.match(legacy.note,/2025 AHA.*不再建議/);
  const context=medicalContext('2本指法');assert.match(context,/two-finger chest compression technique/);assert.match(context,/2本指法/);assert.doesNotMatch(context,/不再建議/);
 });
+
+test('TRM workshop terminology matches briefing, debriefing, handover, coaching CPR and EMT roles',()=>{
+ const sample='緊急救護團隊資源管理 TRM 實作：從派遣 Briefing 與分工，T2 在 CPR 時 TP 進場團隊整合、資訊交接、coaching CPR，最後到院交班與 debriefing';
+ const matched=findMedicalTerms(sample,30).map(t=>t.zh);
+ for(const expected of ['團隊資源管理','勤前簡報','事後檢討','團隊整合','資訊交接','到院交班','教練式心肺復甦指導','中級救護技術員','高級救護技術員']){
+  assert.ok(matched.includes(expected),expected);
+ }
+});

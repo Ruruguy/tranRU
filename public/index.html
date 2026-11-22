@@ -43,12 +43,10 @@
       <div class="ctrl-group">
         <label for="engine">辨識引擎</label>
         <select id="engine">
-          <option value="gemini">✨ Gemini 即時翻譯（首選・極速串流）</option>
-          <option value="vad">⚡ OpenAI 智慧停頓切段（第二優先）</option>
-          <option value="azure">☁ Azure Speech 辨識＋文字翻譯（選用）</option>
-          <option value="precision">🩺 Gemini 專業精準模式（醫療詞彙提示）</option>
-          <option value="native">🚀 極速即時模式 (原生語音)</option>
-          <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
+          <option value="gemini">✨ Gemini 極速即時翻譯（首選推薦・免費額度可用）</option>
+          <option value="precision">🩺 Gemini 專業醫療／救護精準模式（內建專有名詞庫）</option>
+          <option value="free">🌐 完全免費・免金鑰即時模式（無需 API 金鑰）</option>
+          <option value="vad">⚡ OpenAI 智慧停頓切段（GPT-4o 語音備援）</option>
         </select>
       </div>
 
@@ -235,9 +233,17 @@
 - 閃燃/回燃: Flashover / Backdraft | フラッシュオーバー・バックドラフト
 - 局限空間/繩索救援: Confined space / Technical rope rescue | 閉鎖空間救助・ロープ救助
 
-[人員體系與大量傷患 EMS & Triage]
+[人員體系與大量傷患 EMS & Triage & TRM]
 - 救護技術員(EMT): Emergency Medical Technician | 救急隊員
-- 高級救護技術員(專救): Paramedic (EMT-P) | 救急救命士
+- 中級救護技術員(T2): EMT-Intermediate (EMT-2) | 中級救急救命隊員
+- 高級救護技術員(專救/TP): Paramedic (EMT-P) | 救急救命士
+- 團隊資源管理(TRM): Team Resource Management (TRM) | チームリソースマネジメント
+- 勤前簡報與分工(Briefing): Team briefing & role assignment | ブリーフィング・役割分担
+- 事後檢討與團隊回饋(Debriefing): Debriefing & team feedback | デブリーフィング
+- 團隊整合與資訊交接: Team integration & information handover | チーム統合・情報引き継ぎ
+- 衝突處理與到院交班: Conflict resolution & hospital handoff | コンフリクト対処・病院引き継ぎ
+- 教練式CPR指導(coaching CPR): CPR coaching | CPRコーチング
+- 復甦安妮/救護三寶: CPR training manikin (Resusci Anne) / EMS primary response kit | 蘇生訓練人形・救急基本装備
 - 救護車/派遣中心: Ambulance / 911 dispatch | 救急車・指令センター
 - 大量傷病患(MCI): Mass Casualty Incident | 多数傷病者事故
 - 檢傷分類: Triage (START triage) | トリアージ (赤・黄・緑・黒)
@@ -337,12 +343,10 @@
         <div class="ctrl-group">
           <label for="convSpeechEngine">辨識引擎</label>
           <select id="convSpeechEngine">
-          <option value="gemini">✨ Gemini 即時翻譯（首選・極速串流）</option>
-          <option value="vad">⚡ OpenAI 智慧停頓切段（第二優先）</option>
-          <option value="azure">☁ Azure Speech 辨識＋文字翻譯（選用）</option>
-          <option value="precision">🩺 Gemini 專業精準模式（醫療詞彙提示）</option>
-          <option value="native">🚀 極速即時模式 (原生語音)</option>
-          <option value="free">🌐 免金鑰即時模式 (無需 API 金鑰)</option>
+          <option value="gemini">✨ Gemini 極速即時翻譯（首選推薦・免費額度可用）</option>
+          <option value="precision">🩺 Gemini 專業醫療／救護精準模式（內建專有名詞庫）</option>
+          <option value="free">🌐 完全免費・免金鑰即時模式（無需 API 金鑰）</option>
+          <option value="vad">⚡ OpenAI 智慧停頓切段（GPT-4o 語音備援）</option>
         </select>
         </div>
         <div class="ctrl-group">
@@ -379,7 +383,7 @@
       </section>
 
       <div class="statusbar conv-statusbar">
-        <span id="convLiveStatus">Gemini 可自動辨識多語；Azure／原生／免金鑰模式請指定辨識語言。選擇引擎後按「開始自動對話聆聽」</span>
+        <span id="convLiveStatus">Gemini 與精準模式可自動辨識多語；免金鑰模式請指定辨識語言。選擇引擎後按「開始自動對話聆聽」</span>
         <span id="convStatus" style="display:none;">○ 準備就緒</span>
         <span id="convCount">0 則對話</span>
       </div>
@@ -507,29 +511,41 @@
     <h2>翻譯與辨識服務設定</h2>
     <p id="keyDescription">請填入你自己的 Gemini API 金鑰。金鑰僅暫存在本站伺服器上屬於你的工作階段記憶體，不寫入磁碟；閒置約 30 分鐘或伺服器重啟後需重填。只有設定與使用時會送往服務端，不會提供給其他訪客。</p>
     
-    <label>Gemini API 金鑰（主要服務）
+    <label>Gemini API 金鑰（首選推薦・免費額度或 GCP 額度皆可）
       <input id="geminiKey" type="password" autocomplete="off" placeholder="貼上 Google AI Studio API 金鑰">
     </label>
-    <p><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">取得 Gemini API 金鑰 ↗</a> · <span id="keyStatus"></span></p>
+    <p><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">免費取得 Gemini API 金鑰 ↗</a> · <span id="keyStatus"></span></p>
     <label class="inline"><input id="fallback" type="checkbox">Gemini 中斷時，自動改用 OpenAI（需另設金鑰）</label>
-    <label>OpenAI API 金鑰（備用服務）
+    <label>OpenAI API 金鑰（選用備援）
       <input id="key" type="password" autocomplete="off" placeholder="sk-proj-…">
     </label>
-    
-    <label>Azure Speech 金鑰（選用；不是 Azure OpenAI 金鑰）
-      <input id="azureKey" type="password" autocomplete="off" placeholder="Azure Speech 資源的 Key 1 或 Key 2">
+
+    <div style="display:none!important;" hidden>
+      <input id="azureKey" type="password" autocomplete="off">
+      <input id="azureRegion" autocomplete="off">
+      <p id="azureKeyStatus">Azure：未設定</p>
+    </div>
+
+    <label>串流翻譯與摘要主力模型 (LLM Provider)
+      <select id="translationProvider">
+        <option value="auto">✨ 自動最佳化（優先使用 Gemini 3.5 Flash-Lite 極速模型）</option>
+        <option value="gemini">✨ Google Gemini (Gemini 3.5 Flash-Lite · 首字極速・免費額度高)</option>
+        <option value="openai">⚡ OpenAI (GPT-4o mini · 穩定備援)</option>
+      </select>
     </label>
-    <label>Azure Speech 資源區域
-      <input id="azureRegion" autocomplete="off" placeholder="例如 eastasia 或 southeastasia">
-    </label>
-    <p id="azureKeyStatus">Azure：未設定</p>
-    <small>Azure 模式先辨識，再以 Gemini／OpenAI 翻譯，可沿用三語字幕及醫療詞庫。請指定演講語言。Azure 金鑰只保存在本分頁記憶體，重新整理需重填；音訊與詞彙提示直接送往 Microsoft。需要另設上方 Gemini 或 OpenAI 至少一組金鑰；Azure 不會作為獨立翻譯服務自動接替。</small>
+
     <label>OpenAI 翻譯模型 (Chat Model)
-      <input id="model" value="gpt-4o-mini" placeholder="gpt-4o-mini 或 gpt-4o">
+      <select id="model">
+        <option value="gpt-4o-mini" selected>⚡ GPT-4o mini（推薦・極速低延遲・最省錢）</option>
+        <option value="gpt-4o">🎯 GPT-4o（旗艦高精準度）</option>
+      </select>
     </label>
-    
+
     <label>OpenAI 語音辨識模型 (STT Model)
-      <input id="speech" value="gpt-4o-mini-transcribe" placeholder="gpt-4o-mini-transcribe 或 whisper-1">
+      <select id="speech">
+        <option value="gpt-4o-mini-transcribe" selected>⚡ GPT-4o mini Transcribe（推薦・新一代極速高準確率）</option>
+        <option value="gpt-4o-transcribe">🎯 GPT-4o Transcribe（旗艦級高精準語音辨識）</option>
+      </select>
     </label>
 
     <label>切段停頓靈敏度 (VAD Silence Wait)
@@ -540,20 +556,12 @@
       </select>
     </label>
 
-    <label>串流翻譯服務商 (LLM Provider)
-      <select id="translationProvider">
-        <option value="auto">✨ 自動選擇（有 Gemini 金鑰優先使用 Gemini Flash）</option>
-        <option value="gemini">✨ Google Gemini (Gemini Flash · 首字極速)</option>
-        <option value="openai">⚡ OpenAI (GPT-4o-mini)</option>
-      </select>
-    </label>
-
     <button id="save" class="primary">儲存設定</button>
     <button id="checkGemini">測試 Gemini 連線（不收音）</button>
     <button id="clearKeys">清除我的金鑰</button>
     <p id="configStatus" role="status"></p>
     <small>
-      提示：若使用「極速即時模式 (原生語音)」，現場收音由瀏覽器提供辨識，速度與支援依瀏覽器而定；譯文可依偏好由 Gemini Flash 或 OpenAI 串流產出。
+      推薦搭配：一般演講或雙向對話請選「✨ Gemini 極速即時翻譯」；消防救護與醫療研討會（如 TRM 工作坊）可選「🩺 Gemini 專業醫療／救護精準模式」；未準備金鑰時可直接選「🌐 完全免費・免金鑰即時模式」。
     </small>
   </dialog>
 
